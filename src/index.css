@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  body {
+    @apply bg-[#faf8f5] text-slate-900 antialiased;
+    font-family: var(--font-sans);
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply bg-white/95 backdrop-blur-xl border border-[#e8e2d8] rounded-[32px] shadow-xl shadow-stone-900/5;
+  }
+  
+  .glass-card {
+    @apply bg-white/90 backdrop-blur-md border border-[#e8e2d8] rounded-2xl shadow-sm transition-all hover:bg-white hover:border-orange-500/40 hover:shadow-md;
+  }
+
+  /* Cultural Adire / Batik Linework Motif Background */
+  /* Rendered in its authentic indigo-on-linen tones via multiply blend on warm academic paper */
+  .cultural-pattern-bg {
+    @apply fixed inset-0 -z-20 pointer-events-none;
+    background-image: url('/assets/aistudio/image_549a64c1_fb8a81e8.jpg');
+    background-repeat: repeat;
+    background-size: 520px auto;
+    opacity: 0.12;
+    mix-blend-mode: multiply;
+  }
+
+  /* Rich Linework Mode for users who prefer higher cultural visibility */
+  .cultural-pattern-rich {
+    opacity: 0.22 !important;
+  }
+
+  /* Muted Linework Mode */
+  .cultural-pattern-muted {
+    opacity: 0.05 !important;
+  }
+
+  /* Decorative empty-space & card watermark container */
+  .cultural-watermark-card {
+    @apply relative overflow-hidden;
+  }
+
+  .cultural-watermark-card::before {
+    content: '';
+    @apply absolute inset-0 pointer-events-none;
+    background-image: url('/assets/aistudio/image_549a64c1_fb8a81e8.jpg');
+    background-repeat: repeat;
+    background-size: 400px auto;
+    opacity: 0.14;
+    mix-blend-mode: multiply;
+    mask-image: linear-gradient(135deg, rgba(0,0,0,1) 0%, rgba(0,0,0,0.1) 100%);
+    -webkit-mask-image: linear-gradient(135deg, rgba(0,0,0,1) 0%, rgba(0,0,0,0.1) 100%);
+  }
+
+  /* Warm Scholarly Atmosphere */
+  .atmosphere {
+    @apply fixed inset-0 -z-10 overflow-hidden pointer-events-none;
+    background: 
+      radial-gradient(circle at 50% 15%, rgba(249, 115, 22, 0.06) 0%, transparent 60%),
+      radial-gradient(circle at 12% 70%, rgba(217, 119, 6, 0.05) 0%, transparent 50%),
+      radial-gradient(circle at 88% 25%, rgba(30, 58, 138, 0.04) 0%, transparent 45%);
+    filter: blur(80px);
+  }
+
+  .text-glow {
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  }
+}

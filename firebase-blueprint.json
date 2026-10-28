@@ -1,0 +1,68 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Information about a registered scholar or admin.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The unique Firebase Auth UID." },
+        "name": { "type": "string", "description": "The full name of the user." },
+        "email": { "type": "string", "format": "email", "description": "The email address of the user." },
+        "role": { "type": "string", "enum": ["admin", "scholar"], "description": "The user's role in the system." },
+        "registeredTrainings": { "type": "array", "items": { "type": "string" }, "description": "List of training session IDs the user is registered for." },
+        "bookmarks": { "type": "array", "description": "List of bookmarked research article objects." },
+        "affiliation": { "type": "string", "description": "User's institution or university." },
+        "academicTitle": { "type": "string", "description": "User's academic title or designation." },
+        "department": { "type": "string", "description": "User's academic department or research field." },
+        "bio": { "type": "string", "description": "Short bio or research interests summary." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the user account was created." }
+      },
+      "required": ["uid", "name", "email", "role"]
+    },
+    "BlogPost": {
+      "title": "Blog Post",
+      "description": "An academic insight or news article.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "The title of the post." },
+        "excerpt": { "type": "string", "description": "A short summary of the post." },
+        "content": { "type": "string", "description": "The full content of the post." },
+        "date": { "type": "string", "description": "The date the post was published (display format)." },
+        "author": { "type": "string", "description": "The name of the author." },
+        "image": { "type": "string", "description": "URL or Data URL to the post's header image." },
+        "status": { "type": "string", "enum": ["draft", "published"], "description": "The publication status of the post." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Internal timestamp for sorting." }
+      },
+      "required": ["title", "excerpt", "content", "author", "image", "status"]
+    },
+    "TrainingSession": {
+      "title": "Training Session",
+      "description": "A professional development workshop.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "The title of the workshop." },
+        "description": { "type": "string", "description": "A detailed description of the session." },
+        "date": { "type": "string", "description": "The date of the session (YYYY-MM-DD)." },
+        "time": { "type": "string", "description": "The time of the session." },
+        "capacity": { "type": "integer", "description": "Maximum number of participants." },
+        "registeredCount": { "type": "integer", "description": "Current number of registered participants." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Internal timestamp." }
+      },
+      "required": ["title", "description", "date", "time", "capacity"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents."
+    },
+    "/blog_posts/{postId}": {
+      "schema": "BlogPost",
+      "description": "Collection of academic blog posts."
+    },
+    "/training_sessions/{sessionId}": {
+      "schema": "TrainingSession",
+      "description": "Collection of available training sessions."
+    }
+  }
+}

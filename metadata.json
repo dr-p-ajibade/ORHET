@@ -1,0 +1,6 @@
+{
+  "name": "ARHET",
+  "description": "Academic Research & Higher Education Transformation (ARHET) - A professional platform for academic research, blog, training services, and scholar account management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ARHET - Academic Research & Higher Education Transformation</title>
+    <meta name="description" content="Academic Research & Higher Education Transformation (ARHET) - A professional platform for academic research, blog, training services, and scholar account management." />
+    <meta property="og:title" content="ARHET - Academic Research & Higher Education Transformation" />
+    <meta property="og:description" content="Academic Research & Higher Education Transformation (ARHET) - A professional platform for academic research, blog, training services, and scholar account management." />
+    <script>
+      // Gracefully handle benign Vite HMR / ModuleRunner WebSocket connection attempts in the cloud sandbox
+      window.addEventListener('error', function(event) {
+        var msg = (event && (event.message || (event.error && event.error.message))) || '';
+        var src = (event && event.filename) || '';
+        if (msg.includes('WebSocket') || msg.includes('createWebSocketModuleRunnerTransport') || src.includes('@vite/client')) {
+          event.preventDefault();
+          if (typeof event.stopImmediatePropagation === 'function') {
+            event.stopImmediatePropagation();
+          }
+          return true;
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', function(event) {
+        var reason = event && event.reason ? (event.reason.message || String(event.reason)) : '';
+        if (reason.includes('WebSocket') || reason.includes('createWebSocketModuleRunnerTransport') || reason.includes('@vite/client')) {
+          event.preventDefault();
+          if (typeof event.stopImmediatePropagation === 'function') {
+            event.stopImmediatePropagation();
+          }
+          return true;
+        }
+      }, true);
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
