@@ -2,18 +2,34 @@ import jsPDF from 'jspdf';
 import { SearchResult } from '../types';
 
 /**
- * Format standard APA Citation for a research article
+ * Format standard APA 7th Edition Citation for a research article
  */
 export function formatAPACitation(article: SearchResult): string {
-  const authorStr = article.authors && article.authors.length > 0
-    ? article.authors.join(', ')
-    : 'Unknown Author';
-  const yearStr = article.year ? `(${article.year})` : '(n.d.)';
-  const titleStr = article.title.endsWith('.') ? article.title : `${article.title}.`;
-  const journalStr = article.journal ? `${article.journal}.` : '';
-  const doiStr = article.doi ? ` https://doi.org/${article.doi.replace('https://doi.org/', '')}` : '';
+  let authorStr = 'Unknown Author';
+  if (article.authors && article.authors.length > 0) {
+    const cleanedAuthors = article.authors.map(a => {
+      return a.replace(/\(PhD\)/gi, '').replace(/\b(Dr|Prof|Mr|Ms|Mrs)\.?\s+/gi, '').trim();
+    }).filter(Boolean);
 
-  return `${authorStr} ${yearStr}. ${titleStr} ${journalStr}${doiStr}`.trim();
+    if (cleanedAuthors.length === 1) {
+      authorStr = cleanedAuthors[0];
+    } else if (cleanedAuthors.length === 2) {
+      authorStr = `${cleanedAuthors[0]} & ${cleanedAuthors[1]}`;
+    } else if (cleanedAuthors.length > 2) {
+      const allExceptLast = cleanedAuthors.slice(0, -1).join(', ');
+      authorStr = `${allExceptLast}, & ${cleanedAuthors[cleanedAuthors.length - 1]}`;
+    }
+  }
+
+  const yearStr = article.year ? `(${article.year})` : '(n.d.)';
+  const cleanTitle = article.title ? (article.title.trim().endsWith('.') ? article.title.trim() : `${article.title.trim()}.`) : 'Untitled Work.';
+  const journalStr = article.journal ? (article.journal.trim().endsWith('.') ? `${article.journal.trim()}` : `${article.journal.trim()}.`) : '';
+  const rawDoi = article.doi ? article.doi.trim() : '';
+  const doiStr = rawDoi 
+    ? (rawDoi.startsWith('http') ? ` ${rawDoi}` : ` https://doi.org/${rawDoi.replace(/^doi:\s*/i, '')}`)
+    : (article.url ? ` ${article.url}` : '');
+
+  return `${authorStr} ${yearStr}. ${cleanTitle} ${journalStr}${doiStr}`.replace(/\s+/g, ' ').trim();
 }
 
 /**

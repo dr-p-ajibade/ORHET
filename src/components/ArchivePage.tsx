@@ -1,10 +1,10 @@
-import { useState, FormEvent, useMemo } from 'react';
+import { useState, FormEvent, useMemo, useEffect } from 'react';
 import { 
   Search, Loader2, ExternalLink, ChevronRight, Bookmark, 
   BookOpen, AlertCircle, Database, Globe, Layers, 
   ArrowUpRight, BarChart3, Info, CheckCircle2, RotateCcw,
   FileDown, Download, CheckSquare, Square, X, Filter,
-  GraduationCap, Cpu, Users
+  GraduationCap, Cpu, Users, Quote, Copy, Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SearchResult, OpenAlexWork, CrossRefWork, COREWork, User as UserType } from '../types';
@@ -12,12 +12,13 @@ import { db } from '../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { 
   REPOSITORY_STATS, 
-  CURATED_RESEARCH_ARTICLES, 
+  DEFAULT_INITIAL_QUERY, 
   ACADEMIC_CATEGORIES, 
   AcademicCategory, 
   getArticleAcademicCategory 
 } from '../data/curatedArticles';
-import { exportArticleToPDF, exportArticleListToPDF } from '../utils/pdfExport';
+import { exportArticleToPDF, exportArticleListToPDF, formatAPACitation } from '../utils/pdfExport';
+import { validateUserAuthorship } from '../utils/authorVerification';
 
 const SOURCES = [
   { id: 'all', label: 'All Sources' },
@@ -84,6 +85,8 @@ export default function ArchivePage({
   // UI state
   const [bookmarkToast, setBookmarkToast] = useState<string | null>(null);
   const [pdfToast, setPdfToast] = useState<string | null>(null);
+  const [copiedCitationId, setCopiedCitationId] = useState<string | null>(null);
+  const [citationToast, setCitationToast] = useState<string | null>(null);
   const [showScaleDetails, setShowScaleDetails] = useState(false);
   const [sortBy, setSortBy] = useState<'year-desc' | 'year-asc' | 'title'>('year-desc');
 
@@ -110,10 +113,28 @@ export default function ArchivePage({
         };
         const detectedCategory = getArticleAcademicCategory(partialResult);
 
+        // Map author attributions faithfully from OpenAlex JSON response
+        const authorDetails = (work.authorships || []).map((a) => {
+          const authorObj = a.author || { display_name: 'Unknown Author' };
+          const instName = a.institutions?.[0]?.display_name || 
+            (a.raw_affiliation_strings && a.raw_affiliation_strings.length > 0 ? a.raw_affiliation_strings[0] : undefined);
+          return {
+            id: authorObj.id || undefined,
+            name: authorObj.display_name || a.raw_author_name || 'Unknown Author',
+            orcid: authorObj.orcid || a.raw_orcid || null,
+            institution: instName,
+            raw_affiliation_string: a.raw_affiliation_strings?.[0],
+            authorPosition: a.author_position,
+          };
+        });
+
+        const authorNames = authorDetails.map(a => a.name).filter(Boolean);
+
         return {
           id: work.id,
           title: work.display_name,
-          authors: work.authorships?.map(a => a.author.display_name) || [],
+          authors: authorNames.length > 0 ? authorNames : ['Unknown Author'],
+          authorDetails: authorDetails,
           year: work.publication_year ? work.publication_year.toString() : 'N/A',
           journal: work.primary_location?.source?.display_name || 'Academic Source',
           doi: work.doi || '',
@@ -138,10 +159,21 @@ export default function ArchivePage({
         const journalStr = work['container-title']?.[0] || 'Unknown Publication Container';
         const detectedCategory = getArticleAcademicCategory({ title: titleStr, journal: journalStr });
 
+        const authorDetails = (work.author || []).map(a => {
+          const fullName = `${a.given || ''} ${a.family || ''}`.trim() || 'Unknown Author';
+          return {
+            name: fullName,
+            orcid: a.ORCID || null,
+          };
+        });
+
+        const authorNames = authorDetails.map(a => a.name).filter(Boolean);
+
         return {
           id: work.DOI || `crossref-${Math.random()}`,
           title: titleStr,
-          authors: work.author?.map(a => `${a.given || ''} ${a.family || ''}`.trim()).filter(Boolean) || [],
+          authors: authorNames.length > 0 ? authorNames : ['Unknown Author'],
+          authorDetails: authorDetails,
           year: work.created?.['date-parts']?.[0]?.[0]?.toString() || 'N/A',
           journal: journalStr,
           doi: work.DOI || '',
@@ -173,10 +205,15 @@ export default function ArchivePage({
         const abstractStr = work.abstract || '';
         const detectedCategory = getArticleAcademicCategory({ title: titleStr, abstract: abstractStr });
 
+        const authorDetails = (work.authors || []).map(a => ({
+          name: a.name || 'Unknown Author'
+        }));
+
         return {
           id: work.id?.toString() || `core-${Math.random()}`,
           title: titleStr,
           authors: work.authors?.map(a => a.name) || [],
+          authorDetails: authorDetails,
           year: work.yearPublished?.toString() || 'N/A',
           journal: work.publisher || 'CORE Open Access Repository',
           doi: work.doi || '',
@@ -223,25 +260,28 @@ export default function ArchivePage({
     }
   };
 
+  useEffect(() => {
+    triggerSearch(DEFAULT_INITIAL_QUERY);
+  }, []);
+
   const handleSearch = async (e?: FormEvent) => {
     e?.preventDefault();
     await triggerSearch(searchQuery);
   };
 
-  const resetToCurated = () => {
+  const resetToDefaultCorpus = () => {
     setSearchQuery('');
     setFilterQuery('');
     setSelectedTag('All');
     setSelectedCategory('all');
-    setHasSearched(false);
-    setResults([]);
     setError(null);
     setActiveTab('all');
     setSelectedArticleIds([]);
+    triggerSearch(DEFAULT_INITIAL_QUERY);
   };
 
-  // Base raw articles
-  const rawArticles = hasSearched ? results : CURATED_RESEARCH_ARTICLES;
+  // Base raw articles strictly from verified federated database APIs
+  const rawArticles = results;
 
   // Counts per academic category in the current raw dataset
   const categoryCounts = useMemo(() => {
@@ -391,9 +431,9 @@ export default function ArchivePage({
     if (displayedArticles.length === 0) return;
     try {
       const categoryLabel = selectedCategory !== 'all' ? ` [${selectedCategory}]` : '';
-      const title = hasSearched 
+      const title = (hasSearched && searchQuery && searchQuery !== DEFAULT_INITIAL_QUERY)
         ? `ARHET Search Digest: "${searchQuery}"${categoryLabel}`
-        : `ARHET Curated Research Repository${categoryLabel}`;
+        : `ARHET Verified Research Publications${categoryLabel}`;
       
       const filterDescParts = [];
       if (selectedCategory !== 'all') filterDescParts.push(`Category: ${selectedCategory}`);
@@ -416,7 +456,7 @@ export default function ArchivePage({
       exportArticleListToPDF(
         selectedArticles,
         'Selected Academic Research Publications Digest',
-        `User selection: ${selectedArticles.length} curated papers`
+        `User selection: ${selectedArticles.length} verified papers`
       );
       setPdfToast(`Exported ${selectedArticles.length} selected articles as PDF`);
       setTimeout(() => setPdfToast(null), 3500);
@@ -425,12 +465,28 @@ export default function ArchivePage({
     }
   };
 
+  const handleCopyCitation = (article: SearchResult, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    try {
+      const citation = formatAPACitation(article);
+      navigator.clipboard?.writeText(citation);
+      setCopiedCitationId(article.id);
+      setCitationToast(`APA Citation copied: "${article.title.slice(0, 32)}..."`);
+      setTimeout(() => setCopiedCitationId(null), 2500);
+      setTimeout(() => setCitationToast(null), 3500);
+    } catch (err) {
+      console.error('Failed to copy citation:', err);
+    }
+  };
+
   const handleTagClick = (tag: string) => {
     setSelectedTag(tag);
     if (tag === 'All') {
       setFilterQuery('');
+      triggerSearch(DEFAULT_INITIAL_QUERY);
     } else {
       setFilterQuery(tag);
+      triggerSearch(tag);
     }
   };
 
@@ -862,7 +918,7 @@ export default function ArchivePage({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-2 text-xs text-slate-600">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-mono font-bold text-slate-900 uppercase tracking-wider">
-              {hasSearched ? 'API Search Results' : 'Research Repository'}
+              {searchQuery && searchQuery !== DEFAULT_INITIAL_QUERY ? `API Search: "${searchQuery}"` : 'Live Verified Publications'}
             </span>
             {selectedCategory !== 'all' && (
               <span className="px-2 py-0.5 rounded bg-orange-100 text-orange-800 font-mono font-bold text-[11px]">
@@ -896,9 +952,9 @@ export default function ArchivePage({
               <span>Download List as PDF ({displayedArticles.length})</span>
             </button>
 
-            {(hasSearched || selectedCategory !== 'all' || filterQuery) && (
+            {(searchQuery !== DEFAULT_INITIAL_QUERY || selectedCategory !== 'all' || filterQuery) && (
               <button
-                onClick={resetToCurated}
+                onClick={resetToDefaultCorpus}
                 className="px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-slate-700 text-xs font-mono font-bold flex items-center gap-1.5 transition-colors"
               >
                 <RotateCcw className="w-3 h-3 text-slate-500" />
@@ -968,7 +1024,7 @@ export default function ArchivePage({
           <div className="py-20 text-center space-y-4">
             <Loader2 className="w-10 h-10 text-orange-600 animate-spin mx-auto" />
             <p className="text-slate-500 text-sm font-mono uppercase tracking-widest">
-              Querying federated academic repositories across 284M+ articles...
+              Retrieving Verified Open Access Works from OpenAlex, CrossRef, & CORE...
             </p>
           </div>
         )}
@@ -979,6 +1035,7 @@ export default function ArchivePage({
               const bookmarked = isBookmarked(result.id);
               const isSelected = selectedArticleIds.includes(result.id);
               const articleCategory = getArticleAcademicCategory(result);
+              const userAuthorship = validateUserAuthorship(result, user);
 
               return (
                 <motion.div
@@ -1006,6 +1063,17 @@ export default function ArchivePage({
                           <Square className="w-4 h-4 text-stone-400" />
                         )}
                       </button>
+
+                      {/* Verified Scholar Authorship Association Badge - strictly requires validated author_id or orcid */}
+                      {userAuthorship.isMatch && (
+                        <span 
+                          className="px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1 shadow-xs"
+                          title={`Authorship verified against user profile via ${userAuthorship.matchType === 'orcid' ? 'ORCID' : 'OpenAlex Author ID'}: ${userAuthorship.matchedIdentifier}`}
+                        >
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span>Verified Author (You)</span>
+                        </span>
+                      )}
 
                       {/* Academic Category Badge */}
                       <span 
@@ -1041,6 +1109,30 @@ export default function ArchivePage({
                     </div>
 
                     <div className="flex items-center gap-2">
+                      {/* Copy Citation Button */}
+                      <button
+                        type="button"
+                        onClick={(e) => handleCopyCitation(result, e)}
+                        className={`px-3 py-1.5 rounded-xl border transition-all text-xs font-mono font-bold flex items-center gap-1.5 shadow-sm ${
+                          copiedCitationId === result.id
+                            ? 'bg-amber-100 border-amber-300 text-amber-900'
+                            : 'border-stone-200 bg-stone-50 hover:bg-amber-50 hover:border-amber-300 text-slate-700 hover:text-amber-900'
+                        }`}
+                        title="Copy APA-formatted citation to clipboard"
+                      >
+                        {copiedCitationId === result.id ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            <span className="hidden sm:inline text-emerald-700">Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Quote className="w-3.5 h-3.5 text-amber-600" />
+                            <span className="hidden sm:inline">Copy Citation</span>
+                          </>
+                        )}
+                      </button>
+
                       {/* Download as PDF Button for this selected article */}
                       <button
                         type="button"
@@ -1074,10 +1166,26 @@ export default function ArchivePage({
                     {result.title}
                   </h3>
 
-                  <p className="text-slate-500 text-xs md:text-sm font-medium">
-                    {result.authors.slice(0, 4).join(', ')}
-                    {result.authors.length > 4 && ' et al.'}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs md:text-sm font-medium">
+                    {result.authors.slice(0, 4).map((authorName, aIdx) => {
+                      const isThisAuthorMatched = userAuthorship.isMatch && 
+                        userAuthorship.matchedAuthorName?.toLowerCase() === authorName.toLowerCase();
+                      return (
+                        <span key={aIdx} className="inline-flex items-center gap-1">
+                          <span className={isThisAuthorMatched ? 'font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-300' : 'text-slate-600'}>
+                            {authorName}
+                            {isThisAuthorMatched && (
+                              <span className="ml-1 text-[10px] font-mono text-emerald-700 font-bold bg-emerald-200/60 px-1 rounded">
+                                (You - Verified)
+                              </span>
+                            )}
+                          </span>
+                          {aIdx < Math.min(result.authors.length - 1, 3) && <span className="text-slate-400">,</span>}
+                        </span>
+                      );
+                    })}
+                    {result.authors.length > 4 && <span className="text-slate-400 italic">et al.</span>}
+                  </div>
 
                   <p className="text-slate-600 text-xs md:text-sm line-clamp-2 leading-relaxed">
                     {result.abstract}
@@ -1089,6 +1197,16 @@ export default function ArchivePage({
                         <BookOpen className="w-3.5 h-3.5" />
                         Read Publication Details
                       </span>
+                      <span className="text-slate-300">|</span>
+                      <button
+                        type="button"
+                        onClick={(e) => handleCopyCitation(result, e)}
+                        className="text-slate-500 hover:text-amber-700 font-mono font-medium flex items-center gap-1 transition-colors"
+                        title="Copy APA 7th Edition Citation"
+                      >
+                        <Quote className="w-3 h-3 text-amber-600" />
+                        {copiedCitationId === result.id ? 'Citation Copied!' : 'Copy Citation'}
+                      </button>
                       <span className="text-slate-300">|</span>
                       <button
                         type="button"
@@ -1162,7 +1280,7 @@ export default function ArchivePage({
         )}
 
         {/* Empty state when federated API search returned zero results */}
-        {!loading && displayedArticles.length === 0 && !filterQuery && selectedCategory === 'all' && hasSearched && (
+        {!loading && displayedArticles.length === 0 && !filterQuery && selectedCategory === 'all' && (
           <div className="glass-card cultural-watermark-card p-12 text-center space-y-4 max-w-lg mx-auto border border-stone-200 bg-white">
             <Search className="w-8 h-8 text-orange-500 mx-auto" />
             <h3 className="text-lg font-bold text-slate-900">No matching publications found</h3>
@@ -1170,10 +1288,10 @@ export default function ArchivePage({
               We couldn’t find matches in this specific tab. Try switching to &ldquo;All Sources&rdquo; or modifying your search terms.
             </p>
             <button
-              onClick={resetToCurated}
+              onClick={resetToDefaultCorpus}
               className="px-5 py-2.5 rounded-xl bg-orange-600 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:bg-orange-500 transition-all"
             >
-              Browse Curated Transformation Repository
+              Reload Verified Transformation Repository
             </button>
           </div>
         )}
@@ -1246,6 +1364,21 @@ export default function ArchivePage({
           >
             <Download className="w-4 h-4 text-white animate-bounce" />
             <span>{pdfToast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Citation Copied Toast */}
+      <AnimatePresence>
+        {citationToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 30 }}
+            className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-amber-950/95 border border-amber-600 text-amber-100 px-6 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 z-50 font-bold text-sm backdrop-blur-md"
+          >
+            <Quote className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>{citationToast}</span>
           </motion.div>
         )}
       </AnimatePresence>

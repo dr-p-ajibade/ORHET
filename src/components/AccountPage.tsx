@@ -1,15 +1,18 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   User as UserIcon, Calendar, Bookmark, Mail, MapPin, 
   ExternalLink, Trash2, Edit3, CheckCircle2, 
   Globe, BookOpen, Clock, Building, Award, 
-  X, Check, AlertCircle, Video, FileDown, Download 
+  X, Check, AlertCircle, Video, FileDown, Download,
+  Loader2, Quote, Sparkles, ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { User as UserType, TrainingSession, SearchResult } from '../types';
+import { User as UserType, TrainingSession, SearchResult, OpenAlexWork } from '../types';
 import { db } from '../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
-import { exportArticleToPDF, exportArticleListToPDF } from '../utils/pdfExport';
+import { exportArticleToPDF, exportArticleListToPDF, formatAPACitation } from '../utils/pdfExport';
+import { normalizeOrcid, normalizeAuthorId, getAuthorOrcidUrl, getOpenAlexAuthorUrl } from '../utils/authorVerification';
+import { getArticleAcademicCategory } from '../data/curatedArticles';
 
 interface AccountPageProps {
   user: UserType | null;
@@ -32,17 +35,24 @@ export default function AccountPage({
   onUpdateUser,
   onHandleFirestoreError,
 }: AccountPageProps) {
-  const [activeTab, setActiveTab] = useState<'trainings' | 'bookmarks' | 'profile'>('trainings');
+  const [activeTab, setActiveTab] = useState<'trainings' | 'bookmarks' | 'publications' | 'profile'>('trainings');
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editName, setEditName] = useState(user?.name || '');
   const [editTitle, setEditTitle] = useState(user?.academicTitle || '');
   const [editAffiliation, setEditAffiliation] = useState(user?.affiliation || '');
   const [editDepartment, setEditDepartment] = useState(user?.department || '');
   const [editBio, setEditBio] = useState(user?.bio || '');
+  const [editOrcid, setEditOrcid] = useState(user?.orcid || '');
+  const [editAuthorId, setEditAuthorId] = useState(user?.authorId || '');
   const [savingProfile, setSavingProfile] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [cancelModalSession, setCancelModalSession] = useState<TrainingSession | null>(null);
   const [removeBookmarkItem, setRemoveBookmarkItem] = useState<SearchResult | null>(null);
+
+  // Verified publications state fetched strictly using validated author_id or orcid
+  const [verifiedWorks, setVerifiedWorks] = useState<SearchResult[]>([]);
+  const [loadingWorks, setLoadingWorks] = useState(false);
+  const [copiedCitationId, setCopiedCitationId] = useState<string | null>(null);
 
   if (!user) {
     return (
@@ -73,6 +83,69 @@ export default function AccountPage({
 
   const bookmarksList = user.bookmarks || [];
 
+  // Fetch verified publications directly from OpenAlex using verified identifier
+  useEffect(() => {
+    const fetchUserVerifiedWorks = async () => {
+      const orcidNorm = normalizeOrcid(user?.orcid);
+      const authorIdNorm = normalizeAuthorId(user?.authorId);
+      if (!orcidNorm && !authorIdNorm) {
+        setVerifiedWorks([]);
+        return;
+      }
+
+      setLoadingWorks(true);
+      try {
+        const queryFilter = orcidNorm 
+          ? `author.orcid:${orcidNorm}` 
+          : `author.id:${authorIdNorm}`;
+        
+        const res = await fetch(`https://api.openalex.org/works?filter=${queryFilter}&per-page=30`);
+        if (!res.ok) throw new Error('Failed to fetch verified publications from OpenAlex');
+        const data = await res.json();
+        
+        const mapped: SearchResult[] = (data.results || []).map((work: OpenAlexWork) => {
+          const authorDetails = (work.authorships || []).map((a) => {
+            const authorObj = a.author || { display_name: 'Unknown Author' };
+            const instName = a.institutions?.[0]?.display_name || 
+              (a.raw_affiliation_strings && a.raw_affiliation_strings.length > 0 ? a.raw_affiliation_strings[0] : undefined);
+            return {
+              id: authorObj.id || undefined,
+              name: authorObj.display_name || a.raw_author_name || 'Unknown Author',
+              orcid: authorObj.orcid || a.raw_orcid || null,
+              institution: instName,
+              raw_affiliation_string: a.raw_affiliation_strings?.[0],
+              authorPosition: a.author_position,
+            };
+          });
+
+          const authorNames = authorDetails.map(a => a.name).filter(Boolean);
+
+          return {
+            id: work.id,
+            title: work.display_name,
+            authors: authorNames.length > 0 ? authorNames : ['Unknown Author'],
+            authorDetails: authorDetails,
+            year: work.publication_year ? work.publication_year.toString() : 'N/A',
+            journal: work.primary_location?.source?.display_name || 'Academic Source',
+            doi: work.doi || '',
+            abstract: 'Authentic peer-reviewed publication verified via OpenAlex scholarly index.',
+            source: 'OpenAlex' as const,
+            url: work.doi || `https://openalex.org/${work.id.split('/').pop()}`,
+            category: getArticleAcademicCategory({ title: work.display_name }),
+          };
+        });
+
+        setVerifiedWorks(mapped);
+      } catch (err) {
+        console.error('Failed to load verified works', err);
+      } finally {
+        setLoadingWorks(false);
+      }
+    };
+
+    fetchUserVerifiedWorks();
+  }, [user?.orcid, user?.authorId]);
+
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -84,7 +157,9 @@ export default function AccountPage({
         academicTitle: editTitle.trim(),
         affiliation: editAffiliation.trim(),
         department: editDepartment.trim(),
-        bio: editBio.trim()
+        bio: editBio.trim(),
+        orcid: editOrcid.trim(),
+        authorId: editAuthorId.trim(),
       };
 
       await updateDoc(doc(db, 'users', user.uid), updatedData);
@@ -205,7 +280,7 @@ export default function AccountPage({
         </div>
 
         {/* Quick Stats Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-8 pt-8 border-t border-stone-200">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-8 pt-8 border-t border-stone-200">
           <div className="space-y-1">
             <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500 flex items-center gap-1.5 font-bold">
               <Calendar className="w-3.5 h-3.5 text-orange-600" />
@@ -220,7 +295,14 @@ export default function AccountPage({
             </div>
             <div className="text-2xl font-black text-slate-900">{bookmarksList.length}</div>
           </div>
-          <div className="space-y-1 col-span-2 sm:col-span-1">
+          <div className="space-y-1">
+            <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500 flex items-center gap-1.5 font-bold">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              Verified Works
+            </div>
+            <div className="text-2xl font-black text-emerald-700">{verifiedWorks.length}</div>
+          </div>
+          <div className="space-y-1">
             <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500 flex items-center gap-1.5 font-bold">
               <Award className="w-3.5 h-3.5 text-emerald-600" />
               Scholar Status
@@ -234,7 +316,7 @@ export default function AccountPage({
       <div className="flex items-center gap-2 border-b border-stone-200 pb-4 overflow-x-auto">
         <button
           onClick={() => setActiveTab('trainings')}
-          className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-bold text-sm transition-all ${
+          className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-bold text-sm transition-all shrink-0 ${
             activeTab === 'trainings'
               ? 'bg-orange-600 text-white shadow-md shadow-orange-600/20'
               : 'text-slate-600 hover:text-slate-900 hover:bg-stone-100'
@@ -249,7 +331,7 @@ export default function AccountPage({
 
         <button
           onClick={() => setActiveTab('bookmarks')}
-          className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-bold text-sm transition-all ${
+          className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-bold text-sm transition-all shrink-0 ${
             activeTab === 'bookmarks'
               ? 'bg-orange-600 text-white shadow-md shadow-orange-600/20'
               : 'text-slate-600 hover:text-slate-900 hover:bg-stone-100'
@@ -263,8 +345,25 @@ export default function AccountPage({
         </button>
 
         <button
+          onClick={() => setActiveTab('publications')}
+          className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-bold text-sm transition-all shrink-0 ${
+            activeTab === 'publications'
+              ? 'bg-orange-600 text-white shadow-md shadow-orange-600/20'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-stone-100'
+          }`}
+        >
+          <BookOpen className="w-4 h-4" />
+          Verified Publications
+          {verifiedWorks.length > 0 && (
+            <span className="ml-1.5 px-2 py-0.5 text-xs rounded-full bg-white/20 font-mono">
+              {verifiedWorks.length}
+            </span>
+          )}
+        </button>
+
+        <button
           onClick={() => setActiveTab('profile')}
-          className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-bold text-sm transition-all ${
+          className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-bold text-sm transition-all shrink-0 ${
             activeTab === 'profile'
               ? 'bg-orange-600 text-white shadow-md shadow-orange-600/20'
               : 'text-slate-600 hover:text-slate-900 hover:bg-stone-100'
@@ -502,13 +601,145 @@ export default function AccountPage({
         </section>
       )}
 
-      {/* Tab 3: Personal Details */}
+      {/* Tab 3: Verified Publications Portfolio */}
+      {activeTab === 'publications' && (
+        <section className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-mono font-bold uppercase tracking-wider text-emerald-800">
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                Verified Publications Portfolio
+              </div>
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight">Authentic Scholarly Works</h2>
+              <p className="text-slate-600 text-sm">
+                Publications authenticated strictly against your registered ORCID iD ({normalizeOrcid(user.orcid) || 'Not configured'}) or OpenAlex Author ID ({normalizeAuthorId(user.authorId) || 'Not configured'}).
+              </p>
+            </div>
+            
+            {verifiedWorks.length > 0 && (
+              <button
+                type="button"
+                onClick={() => exportArticleListToPDF(verifiedWorks, `${user.name} — Verified Publications Bibliography`, `Authenticated via ORCID: ${user.orcid || 'N/A'}`)}
+                className="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-sm transition-all shrink-0"
+              >
+                <FileDown className="w-3.5 h-3.5" />
+                <span>Export Portfolio PDF ({verifiedWorks.length})</span>
+              </button>
+            )}
+          </div>
+
+          {loadingWorks && (
+            <div className="py-16 text-center space-y-3">
+              <Loader2 className="w-8 h-8 text-orange-600 animate-spin mx-auto" />
+              <p className="text-slate-500 text-xs font-mono uppercase tracking-widest">
+                Retrieving authenticated publications from OpenAlex...
+              </p>
+            </div>
+          )}
+
+          {!loadingWorks && (!user.orcid && !user.authorId) && (
+            <div className="p-8 rounded-2xl bg-amber-50/80 border border-amber-200 text-center space-y-3 max-w-lg mx-auto">
+              <AlertCircle className="w-8 h-8 text-amber-600 mx-auto" />
+              <h3 className="text-base font-bold text-amber-950">No Academic Identifiers Linked</h3>
+              <p className="text-xs text-amber-800 leading-relaxed">
+                To prevent incorrect attributions and display your authentic publications, please add your ORCID iD or OpenAlex Author ID under <strong>Personal Details</strong>.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('profile');
+                  setIsEditingProfile(true);
+                }}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all"
+              >
+                Add ORCID / OpenAlex ID
+              </button>
+            </div>
+          )}
+
+          {!loadingWorks && (user.orcid || user.authorId) && verifiedWorks.length === 0 && (
+            <div className="p-8 rounded-2xl bg-stone-50 border border-stone-200 text-center space-y-2 max-w-lg mx-auto">
+              <BookOpen className="w-8 h-8 text-stone-400 mx-auto" />
+              <h3 className="text-base font-bold text-slate-800">No Verified Publications Found</h3>
+              <p className="text-xs text-slate-500">
+                No indexed open access articles were returned for identifier {user.orcid || user.authorId}. Please verify your identifier in your profile.
+              </p>
+            </div>
+          )}
+
+          {!loadingWorks && verifiedWorks.length > 0 && (
+            <div className="space-y-4">
+              {verifiedWorks.map((work) => (
+                <div
+                  key={work.id}
+                  onClick={() => onOpenResource(work)}
+                  className="glass-card p-6 bg-white hover:border-emerald-300 hover:shadow-lg transition-all cursor-pointer space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        Verified Attribution
+                      </span>
+                      <span className="text-xs font-mono font-bold text-slate-700">{work.year}</span>
+                      {work.journal && (
+                        <span className="text-xs text-slate-500 truncate max-w-sm">• {work.journal}</span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const citation = formatAPACitation(work);
+                          navigator.clipboard?.writeText(citation);
+                          setCopiedCitationId(work.id);
+                          setTimeout(() => setCopiedCitationId(null), 2500);
+                        }}
+                        className="px-2.5 py-1 rounded-lg border border-stone-200 bg-stone-50 hover:bg-amber-50 text-[11px] font-mono font-bold text-slate-700 flex items-center gap-1"
+                        title="Copy APA Citation"
+                      >
+                        <Quote className="w-3 h-3 text-amber-600" />
+                        <span>{copiedCitationId === work.id ? 'Copied' : 'Cite'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          exportArticleToPDF(work);
+                        }}
+                        className="px-2.5 py-1 rounded-lg border border-stone-200 bg-stone-50 hover:bg-orange-50 text-[11px] font-mono font-bold text-slate-700 flex items-center gap-1"
+                        title="Download PDF"
+                      >
+                        <FileDown className="w-3 h-3 text-orange-600" />
+                        <span>PDF</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <h3 className="text-base font-bold text-slate-900 hover:text-emerald-800 transition-colors">
+                    {work.title}
+                  </h3>
+
+                  <p className="text-xs text-slate-500 font-medium">
+                    {work.authors.join(', ')}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Tab 4: Personal Details */}
       {activeTab === 'profile' && (
         <section className="glass-panel p-8 md:p-10 space-y-8 bg-white">
           <div className="flex items-center justify-between border-b border-stone-200 pb-6">
             <div>
               <h2 className="text-2xl font-black text-slate-900 tracking-tight">Personal Details & Affiliation</h2>
-              <p className="text-slate-600 text-sm">Manage your academic identity, institution information, and research bio.</p>
+              <p className="text-slate-600 text-sm">Manage your academic identity, institution information, verified identifiers, and research bio.</p>
             </div>
             {!isEditingProfile && (
               <button
@@ -518,6 +749,8 @@ export default function AccountPage({
                   setEditAffiliation(user.affiliation || '');
                   setEditDepartment(user.department || '');
                   setEditBio(user.bio || '');
+                  setEditOrcid(user.orcid || '');
+                  setEditAuthorId(user.authorId || '');
                   setIsEditingProfile(true);
                 }}
                 className="px-5 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl font-bold transition-all text-xs uppercase tracking-wider shadow-md shadow-orange-600/20"
@@ -586,6 +819,42 @@ export default function AccountPage({
                 </div>
               </div>
 
+              <div className="grid md:grid-cols-2 gap-6 pt-2 border-t border-stone-200">
+                <div>
+                  <label className="block text-xs font-black text-slate-700 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+                    <span className="w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[9px] font-bold">iD</span>
+                    ORCID Identifier (16 Digits)
+                  </label>
+                  <input
+                    type="text"
+                    value={editOrcid}
+                    onChange={(e) => setEditOrcid(e.target.value)}
+                    placeholder="e.g. 0000-0002-8608-8378 or https://orcid.org/..."
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl p-3.5 text-slate-900 font-mono text-xs focus:bg-white focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 outline-none"
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Used to authenticate author attribution and prevent false paper attribution.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black text-slate-700 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+                    <Globe className="w-3.5 h-3.5 text-orange-600" />
+                    OpenAlex Author ID
+                  </label>
+                  <input
+                    type="text"
+                    value={editAuthorId}
+                    onChange={(e) => setEditAuthorId(e.target.value)}
+                    placeholder="e.g. A5026362049 or https://openalex.org/A5026362049"
+                    className="w-full bg-stone-50 border border-stone-300 rounded-xl p-3.5 text-slate-900 font-mono text-xs focus:bg-white focus:ring-2 focus:ring-orange-500/40 focus:border-orange-500 outline-none"
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Direct OpenAlex works graph author identifier.
+                  </p>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">
                   Academic Bio & Research Interests
@@ -633,6 +902,52 @@ export default function AccountPage({
                   <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500 mb-1 font-bold">Academic Role</div>
                   <div className="inline-block px-3 py-1 bg-orange-50 border border-orange-200 text-orange-700 rounded-full text-xs font-bold uppercase tracking-wider">
                     {user.role}
+                  </div>
+                </div>
+
+                {/* Verified Academic Identifiers Card */}
+                <div className="pt-2 border-t border-stone-200 space-y-2">
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500 font-bold">Verified Academic Identifiers</div>
+                  <div className="space-y-2">
+                    {user.orcid ? (
+                      <div className="flex items-center gap-2 text-xs font-mono bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl">
+                        <span className="w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[9px] font-bold shrink-0">iD</span>
+                        <a 
+                          href={getAuthorOrcidUrl(user.orcid) || '#'} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-emerald-800 hover:text-emerald-950 font-bold hover:underline flex items-center gap-1 truncate"
+                        >
+                          {normalizeOrcid(user.orcid)}
+                          <ExternalLink className="w-3 h-3 shrink-0" />
+                        </a>
+                        <span className="ml-auto px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-900 text-[9px] font-bold uppercase shrink-0">ORCID Validated</span>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-slate-400 italic bg-stone-50 p-2.5 rounded-xl border border-stone-200">
+                        No ORCID linked. Click "Edit Information" to link.
+                      </div>
+                    )}
+
+                    {user.authorId ? (
+                      <div className="flex items-center gap-2 text-xs font-mono bg-orange-50 border border-orange-200 p-2.5 rounded-xl">
+                        <Globe className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+                        <a 
+                          href={getOpenAlexAuthorUrl(user.authorId) || '#'} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-orange-800 hover:text-orange-950 font-bold hover:underline flex items-center gap-1 truncate"
+                        >
+                          {normalizeAuthorId(user.authorId)}
+                          <ExternalLink className="w-3 h-3 shrink-0" />
+                        </a>
+                        <span className="ml-auto px-1.5 py-0.5 rounded bg-orange-200 text-orange-900 text-[9px] font-bold uppercase shrink-0">OpenAlex Validated</span>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-slate-400 italic bg-stone-50 p-2.5 rounded-xl border border-stone-200">
+                        No OpenAlex Author ID linked.
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

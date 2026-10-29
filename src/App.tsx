@@ -171,24 +171,43 @@ function AppContent() {
           const userDoc = await getDoc(userDocRef);
           if (userDoc.exists()) {
             const userData = userDoc.data() as UserType;
-            // Admin auto-assignment for primary owner
-            if (firebaseUser.email === 'ajibadep.sa@gmail.com' && userData.role !== 'admin') {
-              await updateDoc(userDocRef, { role: 'admin' });
-              userData.role = 'admin';
+            const updates: Partial<UserType> = {};
+            
+            // Admin auto-assignment and verified academic identifiers for primary owner
+            if (firebaseUser.email === 'ajibadep.sa@gmail.com') {
+              if (userData.role !== 'admin') {
+                updates.role = 'admin';
+                userData.role = 'admin';
+              }
+              if (!userData.orcid) {
+                updates.orcid = '0000-0002-8608-8378';
+                userData.orcid = '0000-0002-8608-8378';
+              }
+              if (!userData.authorId) {
+                updates.authorId = 'A5026362049';
+                userData.authorId = 'A5026362049';
+              }
+            }
+            
+            if (Object.keys(updates).length > 0) {
+              await updateDoc(userDocRef, updates);
             }
             setUser(userData);
           } else {
+            const isOwner = firebaseUser.email === 'ajibadep.sa@gmail.com';
             const newUser: UserType = {
               uid: firebaseUser.uid,
               email: firebaseUser.email || '',
               name: firebaseUser.displayName || 'Scholar',
-              role: firebaseUser.email === 'ajibadep.sa@gmail.com' ? 'admin' : 'scholar',
+              role: isOwner ? 'admin' : 'scholar',
               registeredTrainings: [],
               bookmarks: [],
               affiliation: '',
-              academicTitle: 'Scholar',
+              academicTitle: isOwner ? 'Senior Scholar & Lead Researcher' : 'Scholar',
               department: '',
               bio: '',
+              authorId: isOwner ? 'A5026362049' : '',
+              orcid: isOwner ? '0000-0002-8608-8378' : '',
               createdAt: serverTimestamp()
             };
             await setDoc(userDocRef, newUser);
