@@ -4,13 +4,19 @@ import {
   BookOpen, AlertCircle, Database, Globe, Layers, 
   ArrowUpRight, BarChart3, Info, CheckCircle2, RotateCcw,
   FileDown, Download, CheckSquare, Square, X, Filter,
-  FileText, Sparkles
+  GraduationCap, Cpu, Users
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SearchResult, OpenAlexWork, CrossRefWork, COREWork, User as UserType } from '../types';
 import { db } from '../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
-import { REPOSITORY_STATS, CURATED_RESEARCH_ARTICLES } from '../data/curatedArticles';
+import { 
+  REPOSITORY_STATS, 
+  CURATED_RESEARCH_ARTICLES, 
+  ACADEMIC_CATEGORIES, 
+  AcademicCategory, 
+  getArticleAcademicCategory 
+} from '../data/curatedArticles';
 import { exportArticleToPDF, exportArticleListToPDF } from '../utils/pdfExport';
 
 const SOURCES = [
@@ -65,6 +71,9 @@ export default function ArchivePage({
   const [activeTab, setActiveTab] = useState('all');
   const [error, setError] = useState<string | null>(null);
 
+  // Academic Category Horizontal Tab Navigation state
+  const [selectedCategory, setSelectedCategory] = useState<AcademicCategory>('all');
+
   // Real-time search filter state
   const [filterQuery, setFilterQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState<string>('All');
@@ -93,17 +102,27 @@ export default function ArchivePage({
     try {
       const res = await fetch(`https://api.openalex.org/works?search=${encodeURIComponent(q)}&per-page=12`);
       const data = await res.json();
-      return (data.results || []).map((work: OpenAlexWork) => ({
-        id: work.id,
-        title: work.display_name,
-        authors: work.authorships?.map(a => a.author.display_name) || [],
-        year: work.publication_year ? work.publication_year.toString() : 'N/A',
-        journal: work.primary_location?.source?.display_name || 'Academic Source',
-        doi: work.doi || '',
-        abstract: decodeOpenAlexAbstract(work.abstract_inverted_index),
-        source: 'OpenAlex' as const,
-        url: work.doi || `https://openalex.org/${work.id.split('/').pop()}`,
-      }));
+      return (data.results || []).map((work: OpenAlexWork) => {
+        const partialResult: Partial<SearchResult> = {
+          title: work.display_name,
+          journal: work.primary_location?.source?.display_name || 'Academic Source',
+          abstract: decodeOpenAlexAbstract(work.abstract_inverted_index),
+        };
+        const detectedCategory = getArticleAcademicCategory(partialResult);
+
+        return {
+          id: work.id,
+          title: work.display_name,
+          authors: work.authorships?.map(a => a.author.display_name) || [],
+          year: work.publication_year ? work.publication_year.toString() : 'N/A',
+          journal: work.primary_location?.source?.display_name || 'Academic Source',
+          doi: work.doi || '',
+          abstract: decodeOpenAlexAbstract(work.abstract_inverted_index),
+          source: 'OpenAlex' as const,
+          url: work.doi || `https://openalex.org/${work.id.split('/').pop()}`,
+          category: detectedCategory,
+        };
+      });
     } catch (e) {
       console.error('OpenAlex fetch failed', e);
       return [];
@@ -114,17 +133,24 @@ export default function ArchivePage({
     try {
       const res = await fetch(`https://api.crossref.org/works?query=${encodeURIComponent(q)}&rows=12`);
       const data = await res.json();
-      return (data.message?.items || []).map((work: CrossRefWork) => ({
-        id: work.DOI || `crossref-${Math.random()}`,
-        title: work.title?.[0] || 'Untitled Publication',
-        authors: work.author?.map(a => `${a.given || ''} ${a.family || ''}`.trim()).filter(Boolean) || [],
-        year: work.created?.['date-parts']?.[0]?.[0]?.toString() || 'N/A',
-        journal: work['container-title']?.[0] || 'Unknown Publication Container',
-        doi: work.DOI || '',
-        abstract: 'Comprehensive metadata indexed via CrossRef Academic Registry.',
-        source: 'CrossRef' as const,
-        url: work.URL || `https://doi.org/${work.DOI}`,
-      }));
+      return (data.message?.items || []).map((work: CrossRefWork) => {
+        const titleStr = work.title?.[0] || 'Untitled Publication';
+        const journalStr = work['container-title']?.[0] || 'Unknown Publication Container';
+        const detectedCategory = getArticleAcademicCategory({ title: titleStr, journal: journalStr });
+
+        return {
+          id: work.DOI || `crossref-${Math.random()}`,
+          title: titleStr,
+          authors: work.author?.map(a => `${a.given || ''} ${a.family || ''}`.trim()).filter(Boolean) || [],
+          year: work.created?.['date-parts']?.[0]?.[0]?.toString() || 'N/A',
+          journal: journalStr,
+          doi: work.DOI || '',
+          abstract: 'Comprehensive metadata indexed via CrossRef Academic Registry.',
+          source: 'CrossRef' as const,
+          url: work.URL || `https://doi.org/${work.DOI}`,
+          category: detectedCategory,
+        };
+      });
     } catch (e) {
       console.error('CrossRef fetch failed', e);
       return [];
@@ -142,17 +168,24 @@ export default function ArchivePage({
         throw new Error(errorData.message || `CORE API request failed with status ${res.status}`);
       }
       const data = await res.json();
-      return (data.results || []).map((work: COREWork) => ({
-        id: work.id?.toString() || `core-${Math.random()}`,
-        title: work.title || 'Untitled Work',
-        authors: work.authors?.map(a => a.name) || [],
-        year: work.yearPublished?.toString() || 'N/A',
-        journal: work.publisher || 'CORE Open Access Repository',
-        doi: work.doi || '',
-        abstract: work.abstract ? (work.abstract.slice(0, 300) + '...') : 'Open access record provided by CORE repository network.',
-        source: 'CORE' as const,
-        url: work.downloadUrl || `https://core.ac.uk/works/${work.id}`,
-      }));
+      return (data.results || []).map((work: COREWork) => {
+        const titleStr = work.title || 'Untitled Work';
+        const abstractStr = work.abstract || '';
+        const detectedCategory = getArticleAcademicCategory({ title: titleStr, abstract: abstractStr });
+
+        return {
+          id: work.id?.toString() || `core-${Math.random()}`,
+          title: titleStr,
+          authors: work.authors?.map(a => a.name) || [],
+          year: work.yearPublished?.toString() || 'N/A',
+          journal: work.publisher || 'CORE Open Access Repository',
+          doi: work.doi || '',
+          abstract: work.abstract ? (work.abstract.slice(0, 300) + '...') : 'Open access record provided by CORE repository network.',
+          source: 'CORE' as const,
+          url: work.downloadUrl || `https://core.ac.uk/works/${work.id}`,
+          category: detectedCategory,
+        };
+      });
     } catch (e) {
       console.error('CORE fetch failed', e);
       return [];
@@ -199,6 +232,7 @@ export default function ArchivePage({
     setSearchQuery('');
     setFilterQuery('');
     setSelectedTag('All');
+    setSelectedCategory('all');
     setHasSearched(false);
     setResults([]);
     setError(null);
@@ -209,16 +243,38 @@ export default function ArchivePage({
   // Base raw articles
   const rawArticles = hasSearched ? results : CURATED_RESEARCH_ARTICLES;
 
-  // Real-time filtered articles (by database source, tag, and real-time text query)
+  // Counts per academic category in the current raw dataset
+  const categoryCounts = useMemo(() => {
+    const counts: Record<AcademicCategory, number> = {
+      all: rawArticles.length,
+      Education: 0,
+      Technology: 0,
+      'Social Science': 0,
+    };
+    rawArticles.forEach(art => {
+      const cat = getArticleAcademicCategory(art);
+      if (counts[cat] !== undefined) {
+        counts[cat]++;
+      }
+    });
+    return counts;
+  }, [rawArticles]);
+
+  // Real-time filtered articles (by academic category, database source, and text query)
   const filteredArticles = useMemo(() => {
     let list = rawArticles;
 
-    // 1. Filter by source tab (All, OpenAlex, CrossRef, CORE)
+    // 1. Filter by Academic Category ('all' | 'Education' | 'Technology' | 'Social Science')
+    if (selectedCategory !== 'all') {
+      list = list.filter(art => getArticleAcademicCategory(art) === selectedCategory);
+    }
+
+    // 2. Filter by source tab (All, OpenAlex, CrossRef, CORE)
     if (activeTab !== 'all') {
       list = list.filter(art => art.source.toLowerCase() === activeTab.toLowerCase());
     }
 
-    // 2. Real-time text filter (Title, Author, Keyword, Journal, DOI)
+    // 3. Real-time text filter (Title, Author, Keyword, Journal, DOI)
     const cleanQuery = filterQuery.trim().toLowerCase();
     if (cleanQuery) {
       const queryTokens = cleanQuery.split(/\s+/).filter(Boolean);
@@ -235,7 +291,7 @@ export default function ArchivePage({
     }
 
     return list;
-  }, [rawArticles, activeTab, filterQuery]);
+  }, [rawArticles, selectedCategory, activeTab, filterQuery]);
 
   // Sort articles
   const displayedArticles = useMemo(() => {
@@ -334,13 +390,15 @@ export default function ArchivePage({
     e?.stopPropagation();
     if (displayedArticles.length === 0) return;
     try {
+      const categoryLabel = selectedCategory !== 'all' ? ` [${selectedCategory}]` : '';
       const title = hasSearched 
-        ? `ARHET Search Digest: "${searchQuery}"`
-        : 'ARHET Curated Higher Education Transformation Repository';
+        ? `ARHET Search Digest: "${searchQuery}"${categoryLabel}`
+        : `ARHET Curated Research Repository${categoryLabel}`;
       
-      const filterDesc = filterQuery.trim()
-        ? `Filter query: "${filterQuery}"`
-        : undefined;
+      const filterDescParts = [];
+      if (selectedCategory !== 'all') filterDescParts.push(`Category: ${selectedCategory}`);
+      if (filterQuery.trim()) filterDescParts.push(`Search Term: "${filterQuery}"`);
+      const filterDesc = filterDescParts.length > 0 ? filterDescParts.join(' • ') : undefined;
 
       exportArticleListToPDF(displayedArticles, title, filterDesc);
       setPdfToast(`Exported ${displayedArticles.length} publications as scholarly PDF bibliography`);
@@ -557,6 +615,91 @@ export default function ArchivePage({
       </section>
 
       {/* ======================================================== */}
+      {/* HORIZONTAL TAB NAVIGATION: ACADEMIC CATEGORIES           */}
+      {/* ======================================================== */}
+      <section className="space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-1">
+          <div className="flex items-center gap-2 text-xs font-mono font-bold uppercase tracking-wider text-slate-700">
+            <Layers className="w-3.5 h-3.5 text-orange-600" />
+            <span>Academic Category Discipline Navigation</span>
+          </div>
+          <span className="text-[11px] font-mono text-slate-500">
+            Categorised by scholarly domain
+          </span>
+        </div>
+
+        {/* Horizontal Navigation Tabs */}
+        <div className="bg-stone-100/90 p-1.5 rounded-2xl border border-stone-300/80 shadow-sm flex flex-wrap sm:flex-nowrap items-center gap-1.5">
+          {ACADEMIC_CATEGORIES.map((cat) => {
+            const isActive = selectedCategory === cat.id;
+            const count = categoryCounts[cat.id];
+            const Icon = 
+              cat.id === 'Education' ? GraduationCap :
+              cat.id === 'Technology' ? Cpu :
+              cat.id === 'Social Science' ? Users : Layers;
+
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setSelectedCategory(cat.id)}
+                className={`flex-1 min-w-[130px] sm:min-w-0 py-3 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 relative ${
+                  isActive
+                    ? 'bg-white text-orange-900 shadow-md border border-stone-200/90 font-black'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60 font-semibold'
+                }`}
+              >
+                <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-orange-600' : 'text-slate-400'}`} />
+                <span className="font-sans whitespace-nowrap">{cat.label}</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold shrink-0 ${
+                  isActive 
+                    ? 'bg-orange-100 text-orange-800' 
+                    : 'bg-stone-200 text-slate-600'
+                }`}>
+                  {count}
+                </span>
+                {isActive && (
+                  <motion.div
+                    layoutId="activeCategoryIndicator"
+                    className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-8 h-1 bg-orange-600 rounded-full"
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Selected Category Descriptive Strip */}
+        <AnimatePresence mode="wait">
+          {selectedCategory !== 'all' ? (
+            <motion.div
+              key={selectedCategory}
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              className="px-4 py-2.5 rounded-xl bg-orange-50/80 border border-orange-200 text-xs text-orange-950 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs"
+            >
+              <div className="flex items-center gap-2">
+                <span className="font-bold font-mono text-orange-800 uppercase tracking-wide">
+                  {selectedCategory} Domain:
+                </span>
+                <span className="text-slate-700">
+                  {ACADEMIC_CATEGORIES.find(c => c.id === selectedCategory)?.description}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedCategory('all')}
+                className="text-[11px] font-mono text-orange-700 hover:text-orange-900 underline font-bold shrink-0 text-left sm:text-right"
+              >
+                Show All Categories ({rawArticles.length})
+              </button>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+      </section>
+
+      {/* ======================================================== */}
       {/* REAL-TIME SEARCH FILTER & FEDERATED RETRIEVAL PANEL     */}
       {/* ======================================================== */}
       <section className="glass-panel p-6 border border-stone-300 rounded-3xl bg-white/95 shadow-sm space-y-5">
@@ -721,15 +864,20 @@ export default function ArchivePage({
             <span className="font-mono font-bold text-slate-900 uppercase tracking-wider">
               {hasSearched ? 'API Search Results' : 'Research Repository'}
             </span>
+            {selectedCategory !== 'all' && (
+              <span className="px-2 py-0.5 rounded bg-orange-100 text-orange-800 font-mono font-bold text-[11px]">
+                {selectedCategory}
+              </span>
+            )}
             <span className="text-slate-400">•</span>
             <span className="font-mono text-slate-600">
               Showing <strong className="text-orange-700">{displayedArticles.length}</strong> of{' '}
               <strong className="text-slate-900">
                 {rawArticles.length}
               </strong>
-              {filterQuery && (
+              {(selectedCategory !== 'all' || filterQuery) && (
                 <span className="ml-1 text-slate-500">
-                  (filtered from {rawArticles.length})
+                  (filtered view)
                 </span>
               )}
             </span>
@@ -748,13 +896,13 @@ export default function ArchivePage({
               <span>Download List as PDF ({displayedArticles.length})</span>
             </button>
 
-            {hasSearched && (
+            {(hasSearched || selectedCategory !== 'all' || filterQuery) && (
               <button
                 onClick={resetToCurated}
                 className="px-3 py-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-slate-700 text-xs font-mono font-bold flex items-center gap-1.5 transition-colors"
               >
                 <RotateCcw className="w-3 h-3 text-slate-500" />
-                Reset to Curated
+                Reset Filters
               </button>
             )}
 
@@ -830,6 +978,7 @@ export default function ArchivePage({
             {displayedArticles.map((result, idx) => {
               const bookmarked = isBookmarked(result.id);
               const isSelected = selectedArticleIds.includes(result.id);
+              const articleCategory = getArticleAcademicCategory(result);
 
               return (
                 <motion.div
@@ -858,6 +1007,23 @@ export default function ArchivePage({
                         )}
                       </button>
 
+                      {/* Academic Category Badge */}
+                      <span 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedCategory(articleCategory);
+                        }}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono tracking-wide border cursor-pointer hover:opacity-80 transition-opacity ${
+                          articleCategory === 'Education' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+                          articleCategory === 'Technology' ? 'bg-amber-50 text-amber-800 border-amber-200' :
+                          'bg-teal-50 text-teal-800 border-teal-200'
+                        }`}
+                        title={`Filter by ${articleCategory}`}
+                      >
+                        {articleCategory}
+                      </span>
+
+                      {/* Source Database Badge */}
                       <span className={`px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-widest ${
                         result.source === 'OpenAlex' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
                         result.source === 'CrossRef' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
@@ -865,6 +1031,7 @@ export default function ArchivePage({
                       }`}>
                         {result.source}
                       </span>
+
                       <span className="text-slate-700 text-xs font-bold font-mono">{result.year}</span>
                       {result.journal && (
                         <span className="text-slate-500 text-xs truncate max-w-xs md:max-w-md">
@@ -945,27 +1112,42 @@ export default function ArchivePage({
           </div>
         )}
 
-        {/* Empty state when Real-Time Filter finds no matches */}
-        {!loading && displayedArticles.length === 0 && filterQuery && (
+        {/* Empty state when Real-Time Filter or Category has 0 matches */}
+        {!loading && displayedArticles.length === 0 && (filterQuery || selectedCategory !== 'all') && (
           <div className="glass-card cultural-watermark-card p-10 text-center space-y-4 max-w-lg mx-auto border border-stone-200 bg-white">
             <Filter className="w-8 h-8 text-orange-500 mx-auto" />
-            <h3 className="text-lg font-bold text-slate-900">No articles match your search filter</h3>
+            <h3 className="text-lg font-bold text-slate-900">No articles match your criteria</h3>
             <p className="text-slate-500 text-sm">
-              No publications in this category matched &ldquo;<strong className="text-slate-800">{filterQuery}</strong>&rdquo;. Try another author, title fragment, or keyword.
+              {filterQuery && selectedCategory !== 'all'
+                ? `No articles in ${selectedCategory} matched "${filterQuery}".`
+                : filterQuery
+                ? `No publications matched "${filterQuery}".`
+                : `No publications currently classified under ${selectedCategory}.`}
             </p>
-            <div className="flex items-center justify-center gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setFilterQuery('');
-                  setSelectedTag('All');
-                }}
-                className="px-4 py-2 rounded-xl bg-orange-600 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:bg-orange-500 transition-all flex items-center gap-1.5"
-              >
-                <X className="w-3.5 h-3.5" />
-                Clear Search Filter
-              </button>
-              {searchQuery !== filterQuery && (
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+              {filterQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterQuery('');
+                    setSelectedTag('All');
+                  }}
+                  className="px-4 py-2 rounded-xl bg-orange-600 text-white font-bold text-xs uppercase tracking-wider shadow-md hover:bg-orange-500 transition-all flex items-center gap-1.5"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Clear Search Filter
+                </button>
+              )}
+              {selectedCategory !== 'all' && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategory('all')}
+                  className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-slate-800 font-bold text-xs uppercase tracking-wider transition-all"
+                >
+                  Show All Categories
+                </button>
+              )}
+              {searchQuery !== filterQuery && filterQuery && (
                 <button
                   type="button"
                   onClick={() => triggerSearch(filterQuery)}
@@ -980,7 +1162,7 @@ export default function ArchivePage({
         )}
 
         {/* Empty state when federated API search returned zero results */}
-        {!loading && displayedArticles.length === 0 && !filterQuery && hasSearched && (
+        {!loading && displayedArticles.length === 0 && !filterQuery && selectedCategory === 'all' && hasSearched && (
           <div className="glass-card cultural-watermark-card p-12 text-center space-y-4 max-w-lg mx-auto border border-stone-200 bg-white">
             <Search className="w-8 h-8 text-orange-500 mx-auto" />
             <h3 className="text-lg font-bold text-slate-900">No matching publications found</h3>
@@ -1012,23 +1194,24 @@ export default function ArchivePage({
 
             <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
               {[
-                'Student Access & Epistemic Justice',
-                'Digital Transformation in Rural Universities',
-                'Curriculum Decolonisation in Africa',
-                'Open Science Framework in Higher Education',
-                'Doctoral Education & Postgraduate Supervision',
-                'STEM Research Capacity in Developing Countries',
-                'Institutional Repositories & Diamond Open Access'
+                { label: 'Student Access & Epistemic Justice', category: 'Education' },
+                { label: 'Digital Transformation in Rural Universities', category: 'Technology' },
+                { label: 'Curriculum Decolonisation in Africa', category: 'Education' },
+                { label: 'Open Science Framework in Higher Education', category: 'Technology' },
+                { label: 'Doctoral Education & Postgraduate Supervision', category: 'Education' },
+                { label: 'STEM Research Capacity in Developing Countries', category: 'Technology' },
+                { label: 'Institutional Repositories & Diamond Open Access', category: 'Technology' }
               ].map((topic) => (
                 <button
-                  key={topic}
+                  key={topic.label}
                   onClick={() => {
-                    setFilterQuery(topic);
-                    setSelectedTag(topic);
+                    setFilterQuery(topic.label);
+                    setSelectedTag(topic.label);
+                    setSelectedCategory(topic.category as AcademicCategory);
                   }}
                   className="px-3.5 py-2 bg-stone-50 hover:bg-orange-50 border border-stone-200 hover:border-orange-300 rounded-xl text-xs font-bold text-slate-700 hover:text-orange-900 transition-all text-left shadow-sm flex items-center gap-1.5"
                 >
-                  <span>{topic}</span>
+                  <span>{topic.label}</span>
                   <ArrowUpRight className="w-3 h-3 text-orange-600" />
                 </button>
               ))}

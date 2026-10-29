@@ -12,6 +12,7 @@ export interface SearchResult {
   abstract: string;
   source: 'OpenAlex' | 'CrossRef' | 'CORE';
   url: string;
+  category?: 'Education' | 'Technology' | 'Social Science' | string;
 }
 
 export interface OpenAlexWork {

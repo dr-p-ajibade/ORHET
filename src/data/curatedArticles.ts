@@ -16,9 +16,74 @@ export const REPOSITORY_STATS: RepositoryStats = {
   openAlexCount: 250000000,
   crossRefCount: 152000000,
   coreCount: 34500000,
-  curatedCount: 16,
+  curatedCount: 12,
   lastUpdated: 'October 2026',
 };
+
+export const ACADEMIC_CATEGORIES = [
+  { id: 'all', label: 'All', description: 'Comprehensive research repository across all scholarly fields' },
+  { id: 'Education', label: 'Education', description: 'Pedagogy, epistemic access, curriculum reform, doctoral supervision & university teaching' },
+  { id: 'Technology', label: 'Technology', description: 'Digital transformation, AI ethics, open science repositories, STEM & information systems' },
+  { id: 'Social Science', label: 'Social Science', description: 'Societal transformation, epistemic justice, institutional governance, gender equity & community engagement' },
+] as const;
+
+export type AcademicCategory = 'all' | 'Education' | 'Technology' | 'Social Science';
+
+/**
+ * Categorize any article (including dynamically fetched works from APIs)
+ */
+export function getArticleAcademicCategory(article: Partial<SearchResult>): 'Education' | 'Technology' | 'Social Science' {
+  if (article.category === 'Education' || article.category === 'Technology' || article.category === 'Social Science') {
+    return article.category;
+  }
+
+  const text = `${article.title || ''} ${article.journal || ''} ${article.abstract || ''}`.toLowerCase();
+
+  // Technology keywords
+  if (
+    text.includes('digital') ||
+    text.includes('technology') ||
+    text.includes('technolog') ||
+    text.includes('system') ||
+    text.includes('open science') ||
+    text.includes('stem') ||
+    text.includes('repository') ||
+    text.includes('repositories') ||
+    text.includes('ai ') ||
+    text.includes('artificial intelligence') ||
+    text.includes('computing') ||
+    text.includes('hardware') ||
+    text.includes('data ') ||
+    text.includes('network') ||
+    text.includes('interoperability') ||
+    text.includes('software') ||
+    text.includes('oai-pmh')
+  ) {
+    return 'Technology';
+  }
+
+  // Social Science keywords
+  if (
+    text.includes('societ') ||
+    text.includes('social') ||
+    text.includes('governance') ||
+    text.includes('policy') ||
+    text.includes('gender') ||
+    text.includes('equity') ||
+    text.includes('justice') ||
+    text.includes('community') ||
+    text.includes('colonial') ||
+    text.includes('poverty') ||
+    text.includes('librarianship') ||
+    text.includes('epistemic disobedience') ||
+    text.includes('sovereignty')
+  ) {
+    return 'Social Science';
+  }
+
+  // Education default
+  return 'Education';
+}
 
 export const CURATED_RESEARCH_ARTICLES: SearchResult[] = [
   {
@@ -31,6 +96,7 @@ export const CURATED_RESEARCH_ARTICLES: SearchResult[] = [
     abstract: 'This paper examines the exclusionary mechanics of commercial journal oligopolies and argues for university-governed Diamond Open Access repositories as essential infrastructure for post-apartheid and post-colonial institutional equity.',
     source: 'OpenAlex',
     url: 'https://doi.org/10.1080/03075079.2026.2189041',
+    category: 'Education',
   },
   {
     id: 'ajibade-2025-digital-pedagogy-divide',
@@ -42,6 +108,7 @@ export const CURATED_RESEARCH_ARTICLES: SearchResult[] = [
     abstract: 'An empirical investigation into student connectivity precarities, asynchronous modular learning frameworks, and how rural universities navigate digital transformation without exacerbating student attrition.',
     source: 'CrossRef',
     url: 'https://doi.org/10.1016/j.compedu.2025.104921',
+    category: 'Technology',
   },
   {
     id: 'ajibade-2025-open-science-framework',
@@ -53,6 +120,7 @@ export const CURATED_RESEARCH_ARTICLES: SearchResult[] = [
     abstract: 'Evaluates the adoption of FAIR data principles and community preprint servers (such as AfricArXiv) across 42 universities, highlighting structural barriers to regional knowledge interoperability and funding equity.',
     source: 'CORE',
     url: 'https://doi.org/10.1177/1028315325123984',
+    category: 'Technology',
   },
   {
     id: 'ajibade-2024-doctoral-supervision',
@@ -64,6 +132,7 @@ export const CURATED_RESEARCH_ARTICLES: SearchResult[] = [
     abstract: 'Presents a cohort-based relational supervision model designed to accelerate doctoral completion rates and cultivate sovereign research capability among historically disadvantaged postgraduate scholars.',
     source: 'OpenAlex',
     url: 'https://doi.org/10.1080/07294360.2024.2045612',
+    category: 'Education',
   },
   {
     id: 'ajibade-2024-information-poverty',
@@ -75,6 +144,7 @@ export const CURATED_RESEARCH_ARTICLES: SearchResult[] = [
     abstract: 'A critical interrogation of paywalled database licensing agreements, articulating institutional open access policies that liberate student literature review workflows.',
     source: 'CrossRef',
     url: 'https://doi.org/10.1016/j.acalib.2024.102811',
+    category: 'Social Science',
   },
   {
     id: 'curated-decolonising-pedagogy-2025',
@@ -86,6 +156,7 @@ export const CURATED_RESEARCH_ARTICLES: SearchResult[] = [
     abstract: 'Examines curricular restructuring methodologies in social sciences and humanities, transitioning from Eurocentric canons to polycentric, pluriversal teaching frameworks.',
     source: 'OpenAlex',
     url: 'https://doi.org/10.1080/01436597.2025.2019382',
+    category: 'Education',
   },
   {
     id: 'curated-ai-ethics-higher-ed-2026',
@@ -97,6 +168,7 @@ export const CURATED_RESEARCH_ARTICLES: SearchResult[] = [
     abstract: 'Investigates the cognitive and ethical implications of LLM integration into postgraduate research, offering non-punitive pedagogical guidelines for institutional adoption.',
     source: 'CrossRef',
     url: 'https://doi.org/10.1111/bjet.13456',
+    category: 'Technology',
   },
   {
     id: 'curated-stem-capacity-africa-2024',
@@ -108,6 +180,7 @@ export const CURATED_RESEARCH_ARTICLES: SearchResult[] = [
     abstract: 'A longitudinal assessment of regional laboratory networks, open-hardware initiatives, and graduate STEM retention strategies across 18 African institutions.',
     source: 'CORE',
     url: 'https://doi.org/10.1080/20421338.2024.2104598',
+    category: 'Technology',
   },
   {
     id: 'curated-university-governance-2025',
@@ -119,6 +192,7 @@ export const CURATED_RESEARCH_ARTICLES: SearchResult[] = [
     abstract: 'Critiques the managerialist metrics applied to public universities and advances a collegiate democratic governance paradigm that elevates pedagogical value over commercial performance indicators.',
     source: 'OpenAlex',
     url: 'https://doi.org/10.1080/1360080X.2025.2150934',
+    category: 'Social Science',
   },
   {
     id: 'curated-institutional-repositories-2024',
@@ -130,6 +204,7 @@ export const CURATED_RESEARCH_ARTICLES: SearchResult[] = [
     abstract: 'Focuses on OAI-PMH metadata harvesting protocols, persistent identifiers, and open-source DSpace/Invenio deployments across university consortia.',
     source: 'CrossRef',
     url: 'https://doi.org/10.1108/EL-04-2024-0098',
+    category: 'Technology',
   },
   {
     id: 'curated-gender-equity-academia-2025',
@@ -141,6 +216,7 @@ export const CURATED_RESEARCH_ARTICLES: SearchResult[] = [
     abstract: 'Examines systemic publishing velocity discrepancies, maternity penalties, and unequal mentorship pipelines affecting female academics in higher education institutions.',
     source: 'OpenAlex',
     url: 'https://doi.org/10.1080/09540253.2025.2078411',
+    category: 'Social Science',
   },
   {
     id: 'curated-community-engagement-2026',
@@ -152,5 +228,6 @@ export const CURATED_RESEARCH_ARTICLES: SearchResult[] = [
     abstract: 'Advances participatory action research models that ground academic investigations within community-defined problems, dissolving the barrier between the university and society.',
     source: 'CORE',
     url: 'https://doi.org/10.1177/1538192726110293',
+    category: 'Social Science',
   }
 ];

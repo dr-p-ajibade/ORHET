@@ -113,18 +113,20 @@ export function exportArticleToPDF(article: SearchResult) {
   doc.setFontSize(8);
   doc.setTextColor(100, 116, 139);
   doc.text('PUBLICATION YEAR', margin + 4, y + 6);
-  doc.text('DATABASE NODE', margin + 40, y + 6);
-  doc.text('SOURCE / JOURNAL', margin + 85, y + 6);
+  doc.text('CATEGORY', margin + 38, y + 6);
+  doc.text('DATABASE NODE', margin + 74, y + 6);
+  doc.text('SOURCE / JOURNAL', margin + 115, y + 6);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   doc.setTextColor(15, 23, 42);
   doc.text(article.year || 'N/A', margin + 4, y + 12);
-  doc.text(article.source || 'OpenAlex', margin + 40, y + 12);
+  doc.text(article.category || 'Education', margin + 38, y + 12);
+  doc.text(article.source || 'OpenAlex', margin + 74, y + 12);
   
-  const journalTrimmed = article.journal ? (article.journal.length > 50 ? article.journal.substring(0, 48) + '...' : article.journal) : 'Scholarly Repository';
+  const journalTrimmed = article.journal ? (article.journal.length > 38 ? article.journal.substring(0, 36) + '...' : article.journal) : 'Scholarly Repository';
   doc.setFont('helvetica', 'normal');
-  doc.text(journalTrimmed, margin + 85, y + 12);
+  doc.text(journalTrimmed, margin + 115, y + 12);
 
   // DOI line
   doc.setFont('helvetica', 'bold');
@@ -277,7 +279,8 @@ export function exportArticleListToPDF(
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(194, 65, 12);
-    doc.text(`[RECORD #${index + 1}] • ${art.source.toUpperCase()} • ${art.year || 'N/A'}`, margin + 3, y + 4.2);
+    const catPrefix = art.category ? `${art.category.toUpperCase()} • ` : '';
+    doc.text(`[RECORD #${index + 1}] • ${catPrefix}${art.source.toUpperCase()} • ${art.year || 'N/A'}`, margin + 3, y + 4.2);
     y += 9;
 
     // Title
