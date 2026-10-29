@@ -37,6 +37,7 @@ import SettingsModal from './components/SettingsModal';
 import AdminLoginModal from './components/AdminLoginModal';
 import UploadBlogModal from './components/UploadBlogModal';
 import { PERMANENT_BLOGS } from './data/permanentBlogs';
+import { DEFAULT_TRAINING_SESSIONS } from './data/defaultTrainings';
 
 // --- Error Handling & Diagnostics ---
 
@@ -159,7 +160,7 @@ function AppContent() {
 
   // Firestore Data Collections
   const [blogPosts, setBlogPosts] = useState<BlogPost[]>(PERMANENT_BLOGS);
-  const [trainingSessions, setTrainingSessions] = useState<TrainingSession[]>([]);
+  const [trainingSessions, setTrainingSessions] = useState<TrainingSession[]>(DEFAULT_TRAINING_SESSIONS);
 
   // 1. Firebase Auth Listener
   useEffect(() => {
@@ -228,9 +229,19 @@ function AppContent() {
     const trainingUnsubscribe = onSnapshot(
       query(collection(db, 'training_sessions'), orderBy('createdAt', 'desc')),
       (snapshot) => {
-        setTrainingSessions(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as TrainingSession)));
+        if (!snapshot.empty) {
+          const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as TrainingSession));
+          const existingTitles = new Set(docs.map(d => (d.title || '').trim().toLowerCase()));
+          const missingDefaults = DEFAULT_TRAINING_SESSIONS.filter(s => !existingTitles.has(s.title.trim().toLowerCase()));
+          setTrainingSessions([...docs, ...missingDefaults]);
+        } else {
+          setTrainingSessions(DEFAULT_TRAINING_SESSIONS);
+        }
       },
-      (err) => handleFirestoreError(err, OperationType.LIST, 'training_sessions')
+      (err) => {
+        handleFirestoreError(err, OperationType.LIST, 'training_sessions');
+        setTrainingSessions(DEFAULT_TRAINING_SESSIONS);
+      }
     );
 
     return () => {
@@ -239,133 +250,47 @@ function AppContent() {
     };
   }, []);
 
-  // 3. Initial Data Seeding (June, August, October, November workshops + Permanent Dr P Ajibade Blog posts)
+  // 3. Initial Data Seeding by Admin (June, August, October, November workshops + Permanent Dr P Ajibade Blog posts)
   useEffect(() => {
+    if (!user || user.role !== 'admin') return;
+
     const seedData = async () => {
       try {
-        // Seed permanent blog posts by Dr P Ajibade (PhD) into Firestore
+        // Seed permanent blog posts by Dr P Ajibade (PhD) into Firestore if missing
         for (const post of PERMANENT_BLOGS) {
-          const postRef = doc(db, 'blog_posts', post.id);
-          const postDoc = await getDoc(postRef);
-          if (!postDoc.exists()) {
-            await setDoc(postRef, {
-              ...post,
-              createdAt: serverTimestamp()
-            });
+          try {
+            const postRef = doc(db, 'blog_posts', post.id);
+            const postDoc = await getDoc(postRef);
+            if (!postDoc.exists()) {
+              await setDoc(postRef, {
+                ...post,
+                createdAt: serverTimestamp()
+              });
+            }
+          } catch (postErr) {
+            console.warn('Post seed check:', postErr);
           }
         }
 
         const trainingSnap = await getDocs(collection(db, 'training_sessions'));
-        const existingTitles = new Set(trainingSnap.docs.map(d => d.data().title));
+        const existingTitles = new Set(trainingSnap.docs.map(d => (d.data().title || '').trim().toLowerCase()));
 
-        const initialTrainings = [
-          // 4 Confirmed Workshops (June, August, October, November)
-          {
-            title: 'Strategic Leadership in Higher Ed (June)',
-            description: 'A 3-day intensive workshop on transforming institutional culture, governance, and leadership frameworks.',
-            date: '2026-06-15',
-            time: '10:00 AM - 4:00 PM',
-            capacity: 25,
-            registeredCount: 0,
-            meetLink: 'https://meet.google.com/abc-defg-hij',
-            isPotential: false,
-            status: 'confirmed',
-            topicCategory: 'Executive Leadership & Institutional Governance',
-            createdAt: serverTimestamp()
-          },
-          {
-            title: 'Digital Pedagogy & AI Integration (August)',
-            description: 'Hands-on training for faculty on incorporating generative AI and agentic tooling into curriculum design.',
-            date: '2026-08-22',
-            time: '1:00 PM - 5:00 PM',
-            capacity: 40,
-            registeredCount: 0,
-            meetLink: 'https://meet.google.com/klm-nopq-rst',
-            isPotential: false,
-            status: 'confirmed',
-            topicCategory: 'Generative AI & Modern Pedagogy',
-            createdAt: serverTimestamp()
-          },
-          {
-            title: 'Research Methodology & Grant Writing (October)',
-            description: 'Master the art of securing international funding and designing high-impact research projects.',
-            date: '2026-10-10',
-            time: '9:00 AM - 1:00 PM',
-            capacity: 30,
-            registeredCount: 0,
-            meetLink: 'https://meet.google.com/uvw-xyz1-234',
-            isPotential: false,
-            status: 'confirmed',
-            topicCategory: 'Research Design & Grant Funding',
-            createdAt: serverTimestamp()
-          },
-          {
-            title: 'Institutional Effectiveness & Data Analytics (November)',
-            description: 'Leveraging institutional analytics to drive evidence-based decisions and improve scholar outcomes.',
-            date: '2026-11-05',
-            time: '11:00 AM - 3:00 PM',
-            capacity: 20,
-            registeredCount: 0,
-            meetLink: 'https://meet.google.com/567-890a-bcd',
-            isPotential: false,
-            status: 'confirmed',
-            topicCategory: 'Institutional Data & Performance Metrics',
-            createdAt: serverTimestamp()
-          },
-          // Potential Future Trainings & Proposed Cohorts
-          {
-            title: 'Open Science Framework & FAIR Scholarly Publishing (Proposed Cohort)',
-            description: 'Advanced masterclass on institutional open access repositories, preprint ethics, data curation, and international citation impact.',
-            date: '2026-12-14',
-            time: '10:00 AM - 2:00 PM',
-            capacity: 35,
-            registeredCount: 0,
-            meetLink: 'https://meet.google.com/osp-fair-2026',
-            isPotential: true,
-            status: 'potential',
-            topicCategory: 'Open Science & Scholarly Communication',
-            createdAt: serverTimestamp()
-          },
-          {
-            title: 'Doctoral Supervision & High-Impact Thesis Mentorship (Proposed Cohort)',
-            description: 'Transforming postgraduate supervision methodologies, student completion rates, and co-authoring strategies for early-career supervisors.',
-            date: '2027-01-22',
-            time: '11:00 AM - 3:30 PM',
-            capacity: 30,
-            registeredCount: 0,
-            meetLink: 'https://meet.google.com/doc-supv-2027',
-            isPotential: true,
-            status: 'potential',
-            topicCategory: 'Doctoral Pedagogy & Mentorship',
-            createdAt: serverTimestamp()
-          },
-          {
-            title: 'Digital Equity & Rural University Infrastructure Transformation (Proposed Cohort)',
-            description: 'Strategic frameworks addressing technological divides, resilient connectivity, and community-engaged digital literacy in peripheral institutions.',
-            date: '2027-03-19',
-            time: '1:00 PM - 5:00 PM',
-            capacity: 40,
-            registeredCount: 0,
-            meetLink: 'https://meet.google.com/rur-eqty-2027',
-            isPotential: true,
-            status: 'potential',
-            topicCategory: 'Digital Transformation & Rural Communities',
-            createdAt: serverTimestamp()
-          }
-        ];
-
-        for (const training of initialTrainings) {
-          if (!existingTitles.has(training.title)) {
-            await addDoc(collection(db, 'training_sessions'), training);
+        for (const training of DEFAULT_TRAINING_SESSIONS) {
+          if (!existingTitles.has(training.title.trim().toLowerCase())) {
+            const { id: _, ...sessionData } = training;
+            await addDoc(collection(db, 'training_sessions'), {
+              ...sessionData,
+              createdAt: serverTimestamp()
+            });
           }
         }
       } catch (e) {
-        console.warn('Auto-seed checked or skipped', e);
+        console.warn('Admin seed sync skipped or offline:', e);
       }
     };
 
     seedData();
-  }, []);
+  }, [user]);
 
   const handleSignInWithGoogle = async (selectedRole: 'scholar' | 'admin') => {
     const provider = new GoogleAuthProvider();

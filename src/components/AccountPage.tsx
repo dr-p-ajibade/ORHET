@@ -3,12 +3,13 @@ import {
   User as UserIcon, Calendar, Bookmark, Mail, MapPin, 
   ExternalLink, Trash2, Edit3, CheckCircle2, 
   Globe, BookOpen, Clock, Building, Award, 
-  X, Check, AlertCircle, Video
+  X, Check, AlertCircle, Video, FileDown, Download 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User as UserType, TrainingSession, SearchResult } from '../types';
 import { db } from '../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
+import { exportArticleToPDF, exportArticleListToPDF } from '../utils/pdfExport';
 
 interface AccountPageProps {
   user: UserType | null;
@@ -381,12 +382,24 @@ export default function AccountPage({
               <h2 className="text-2xl font-black text-slate-900 tracking-tight">Bookmarked Research Articles</h2>
               <p className="text-slate-600 text-sm">Saved publications from OpenAlex, CrossRef, and CORE in your scholar library.</p>
             </div>
-            <button
-              onClick={onNavigateToArchive}
-              className="px-4 py-2 bg-stone-100 hover:bg-stone-200 border border-stone-200 text-orange-700 rounded-xl text-xs font-bold transition-all shadow-sm"
-            >
-              Search Research Archive
-            </button>
+            <div className="flex items-center gap-2">
+              {bookmarksList.length > 0 && (
+                <button
+                  onClick={() => exportArticleListToPDF(bookmarksList, `${user.name || 'Scholar'} - Saved Research Library`, 'Personal Bookmarks')}
+                  className="px-3.5 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 uppercase tracking-wider"
+                  title="Export all saved bookmarks to PDF"
+                >
+                  <FileDown className="w-3.5 h-3.5" />
+                  <span>Download Library as PDF ({bookmarksList.length})</span>
+                </button>
+              )}
+              <button
+                onClick={onNavigateToArchive}
+                className="px-4 py-2 bg-stone-100 hover:bg-stone-200 border border-stone-200 text-orange-700 rounded-xl text-xs font-bold transition-all shadow-sm"
+              >
+                Search Research Archive
+              </button>
+            </div>
           </div>
 
           {bookmarksList.length > 0 ? (
@@ -425,6 +438,14 @@ export default function AccountPage({
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => exportArticleToPDF(article)}
+                        className="p-2.5 bg-stone-100 hover:bg-orange-50 text-slate-600 hover:text-orange-900 border border-stone-200 hover:border-orange-300 rounded-xl transition-all"
+                        title="Download as PDF Brief"
+                      >
+                        <FileDown className="w-4 h-4 text-orange-600" />
+                      </button>
+
                       <button
                         onClick={() => onOpenResource(article)}
                         className="px-4 py-2 bg-orange-50 hover:bg-orange-600 text-orange-700 hover:text-white border border-orange-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"

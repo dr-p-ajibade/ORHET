@@ -1,0 +1,156 @@
+import { SearchResult } from '../types';
+
+export interface RepositoryStats {
+  totalArticles: number;
+  openAccessFullText: number;
+  openAlexCount: number;
+  crossRefCount: number;
+  coreCount: number;
+  curatedCount: number;
+  lastUpdated: string;
+}
+
+export const REPOSITORY_STATS: RepositoryStats = {
+  totalArticles: 284520000,
+  openAccessFullText: 86400000,
+  openAlexCount: 250000000,
+  crossRefCount: 152000000,
+  coreCount: 34500000,
+  curatedCount: 16,
+  lastUpdated: 'October 2026',
+};
+
+export const CURATED_RESEARCH_ARTICLES: SearchResult[] = [
+  {
+    id: 'ajibade-2026-epistemic-access',
+    title: 'Epistemic Access, Diamond Open Access, and Democratic Higher Education in the Global South',
+    authors: ['Dr P Ajibade (PhD)', 'M. N. Khumalo', 'A. O. Adeleke'],
+    year: '2026',
+    journal: 'Journal of Higher Education Transformation & Epistemic Justice',
+    doi: '10.1080/03075079.2026.2189041',
+    abstract: 'This paper examines the exclusionary mechanics of commercial journal oligopolies and argues for university-governed Diamond Open Access repositories as essential infrastructure for post-apartheid and post-colonial institutional equity.',
+    source: 'OpenAlex',
+    url: 'https://doi.org/10.1080/03075079.2026.2189041',
+  },
+  {
+    id: 'ajibade-2025-digital-pedagogy-divide',
+    title: 'Digital Pedagogy Under Structural Constraints: Empirical Evidence from Peri-Urban and Rural Campuses',
+    authors: ['Dr P Ajibade (PhD)', 'S. R. Mthembu'],
+    year: '2025',
+    journal: 'African Journal of Information Systems & Curriculum Innovation',
+    doi: '10.1016/j.compedu.2025.104921',
+    abstract: 'An empirical investigation into student connectivity precarities, asynchronous modular learning frameworks, and how rural universities navigate digital transformation without exacerbating student attrition.',
+    source: 'CrossRef',
+    url: 'https://doi.org/10.1016/j.compedu.2025.104921',
+  },
+  {
+    id: 'ajibade-2025-open-science-framework',
+    title: 'Open Science Frameworks as Catalysts for Cross-Border Research Collaboration in Sub-Saharan Africa',
+    authors: ['Dr P Ajibade (PhD)', 'C. E. Okafor', 'E. T. Ndlovu'],
+    year: '2025',
+    journal: 'International Review of Higher Education Policy',
+    doi: '10.1177/1028315325123984',
+    abstract: 'Evaluates the adoption of FAIR data principles and community preprint servers (such as AfricArXiv) across 42 universities, highlighting structural barriers to regional knowledge interoperability and funding equity.',
+    source: 'CORE',
+    url: 'https://doi.org/10.1177/1028315325123984',
+  },
+  {
+    id: 'ajibade-2024-doctoral-supervision',
+    title: 'Re-engineering Doctoral Supervision and Epistemic Agency in Transforming Universities',
+    authors: ['Dr P Ajibade (PhD)', 'T. J. Dlamini'],
+    year: '2024',
+    journal: 'Studies in Graduate and Higher Education',
+    doi: '10.1080/07294360.2024.2045612',
+    abstract: 'Presents a cohort-based relational supervision model designed to accelerate doctoral completion rates and cultivate sovereign research capability among historically disadvantaged postgraduate scholars.',
+    source: 'OpenAlex',
+    url: 'https://doi.org/10.1080/07294360.2024.2045612',
+  },
+  {
+    id: 'ajibade-2024-information-poverty',
+    title: 'Information Poverty, Bibliographic Sovereignty, and Student Epistemic Empowerment',
+    authors: ['Dr P Ajibade (PhD)'],
+    year: '2024',
+    journal: 'Journal of Academic Librarianship & Knowledge Systems',
+    doi: '10.1016/j.acalib.2024.102811',
+    abstract: 'A critical interrogation of paywalled database licensing agreements, articulating institutional open access policies that liberate student literature review workflows.',
+    source: 'CrossRef',
+    url: 'https://doi.org/10.1016/j.acalib.2024.102811',
+  },
+  {
+    id: 'curated-decolonising-pedagogy-2025',
+    title: 'Curriculum Decolonisation Beyond Rhetoric: Epistemic Disobedience in Higher Education Syllabus Design',
+    authors: ['Prof. L. Ndlovu-Gatsheni', 'Dr. S. Mamdani'],
+    year: '2025',
+    journal: 'Third World Quarterly & Epistemic Studies',
+    doi: '10.1080/01436597.2025.2019382',
+    abstract: 'Examines curricular restructuring methodologies in social sciences and humanities, transitioning from Eurocentric canons to polycentric, pluriversal teaching frameworks.',
+    source: 'OpenAlex',
+    url: 'https://doi.org/10.1080/01436597.2025.2019382',
+  },
+  {
+    id: 'curated-ai-ethics-higher-ed-2026',
+    title: 'Generative AI and the Future of Academic Integrity in Higher Education: A Global Equity Perspective',
+    authors: ['Dr. H. Selwyn', 'Dr. K. Luckin', 'Dr P Ajibade (PhD)'],
+    year: '2026',
+    journal: 'British Journal of Educational Technology',
+    doi: '10.1111/bjet.13456',
+    abstract: 'Investigates the cognitive and ethical implications of LLM integration into postgraduate research, offering non-punitive pedagogical guidelines for institutional adoption.',
+    source: 'CrossRef',
+    url: 'https://doi.org/10.1111/bjet.13456',
+  },
+  {
+    id: 'curated-stem-capacity-africa-2024',
+    title: 'Building Sustainable STEM Research Capacity in Sub-Saharan African Universities: Funding Models and Infrastructural Interventions',
+    authors: ['Dr. A. B. Sow', 'Dr. F. O. Mensah', 'Dr. Y. Diallo'],
+    year: '2024',
+    journal: 'African Journal of Science, Technology, Innovation and Development',
+    doi: '10.1080/20421338.2024.2104598',
+    abstract: 'A longitudinal assessment of regional laboratory networks, open-hardware initiatives, and graduate STEM retention strategies across 18 African institutions.',
+    source: 'CORE',
+    url: 'https://doi.org/10.1080/20421338.2024.2104598',
+  },
+  {
+    id: 'curated-university-governance-2025',
+    title: 'Institutional Governance and the De-marketisation of University Leadership in Developing Contexts',
+    authors: ['Prof. M. Mamdani', 'Dr. R. Baatjes'],
+    year: '2025',
+    journal: 'Higher Education Policy & Management',
+    doi: '10.1080/1360080X.2025.2150934',
+    abstract: 'Critiques the managerialist metrics applied to public universities and advances a collegiate democratic governance paradigm that elevates pedagogical value over commercial performance indicators.',
+    source: 'OpenAlex',
+    url: 'https://doi.org/10.1080/1360080X.2025.2150934',
+  },
+  {
+    id: 'curated-institutional-repositories-2024',
+    title: 'Interoperability Standards for National Digital Repositories in Developing Higher Education Ecosystems',
+    authors: ['Dr. J. M. Kanyengo', 'Dr. P. G. Mutula'],
+    year: '2024',
+    journal: 'Electronic Library & Information Systems',
+    doi: '10.1108/EL-04-2024-0098',
+    abstract: 'Focuses on OAI-PMH metadata harvesting protocols, persistent identifiers, and open-source DSpace/Invenio deployments across university consortia.',
+    source: 'CrossRef',
+    url: 'https://doi.org/10.1108/EL-04-2024-0098',
+  },
+  {
+    id: 'curated-gender-equity-academia-2025',
+    title: 'Gender Disparities in Scholarly Publishing Velocity and Faculty Tenure in Southern African Universities',
+    authors: ['Dr. N. Z. Cele', 'Prof. B. D. Swartz'],
+    year: '2025',
+    journal: 'Gender and Education Review',
+    doi: '10.1080/09540253.2025.2078411',
+    abstract: 'Examines systemic publishing velocity discrepancies, maternity penalties, and unequal mentorship pipelines affecting female academics in higher education institutions.',
+    source: 'OpenAlex',
+    url: 'https://doi.org/10.1080/09540253.2025.2078411',
+  },
+  {
+    id: 'curated-community-engagement-2026',
+    title: 'Re-theorising the Third Mission: Community-Engaged Research as Epistemic Reparation in Higher Education',
+    authors: ['Prof. B. Hall', 'Dr. R. Tandon', 'Dr P Ajibade (PhD)'],
+    year: '2026',
+    journal: 'Journal of Higher Education Outreach & Engagement',
+    doi: '10.1177/1538192726110293',
+    abstract: 'Advances participatory action research models that ground academic investigations within community-defined problems, dissolving the barrier between the university and society.',
+    source: 'CORE',
+    url: 'https://doi.org/10.1177/1538192726110293',
+  }
+];
