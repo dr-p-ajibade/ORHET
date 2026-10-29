@@ -8,7 +8,7 @@ const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   // Manual Proxy for CORE API to bypass CORS and ensure correct routing
   app.get('/api/core-proxy/*', async (req, res) => {
