@@ -152,7 +152,8 @@ async function europepmc(qy: Query): Promise<Out> {
   if (qy.journal) query += ` AND JOURNAL:"${qy.journal}"`;
   if (qy.oa) query += " AND OPEN_ACCESS:y";
   if (qy.from || qy.to) query += ` AND PUB_YEAR:[${qy.from || 1900} TO ${qy.to || 2100}]`;
-  const u = new URLSearchParams({ query, format: "json", pageSize: "8", resultType: "core", page: String(qy.page) });
+  const u = new URLSearchParams({ query, format: "json", pageSize: "8", resultType: "core" });
+  if (qy.page > 1) return { items: [] };
   if (qy.sort === "cited") u.set("sort", "CITED desc");
   if (qy.sort === "newest") u.set("sort", "P_PDATE_D desc");
   const j = await (await get(`https://www.ebi.ac.uk/europepmc/webservices/rest/search?${u}`)).json();
@@ -208,7 +209,7 @@ async function semanticscholar(qy: Query): Promise<Out> {
 async function arxiv(qy: Query): Promise<Out> {
   const u = new URLSearchParams({ search_query: `all:${terms(qy)}`, start: String((qy.page - 1) * 5), max_results: "5" });
   if (qy.sort === "newest") { u.set("sortBy", "submittedDate"); u.set("sortOrder", "descending"); }
-  const xml = await (await get(`https://export.arxiv.org/api/query?${u}`, { headers: { Accept: "application/atom+xml" } }, 5000)).text();
+  const xml = await (await get(`https://export.arxiv.org/api/query?${u}`, { headers: { Accept: "application/atom+xml" } }, 8000)).text();
   const tag = (s: string, t: string) => s.match(new RegExp(`<${t}[^>]*>([\\s\\S]*?)</${t}>`))?.[1];
   const items = xml.split("<entry>").slice(1).map((e) => {
     const id = clean(tag(e, "id"));
@@ -255,7 +256,8 @@ export async function federatedSearch(qy: Query): Promise<{ results: Rec[]; sour
       try {
         const out = await RUNNERS[id](qy);
         return { id, ok: true, total: out.total, count: out.items.length, items: out.items };
-      } catch {
+      } catch (e) {
+        console.warn(`[orhet] source ${id} failed: ${e instanceof Error ? e.message : e}`);
         return { id, ok: false, count: 0, items: [] };
       }
     }),
