@@ -27,6 +27,7 @@ export default function About() {
               {["Records are fetched live each time you search. ORHET holds no articles of its own.",
                 "Duplicates are merged by DOI and title, and every record links back to its source.",
                 "Free full text links come from the databases themselves or from Unpaywall.",
+                "Each search waits only a few seconds. A database that is slow at that moment is left out of that search, and the results page names the ones that answered.",
                 "Coverage and metadata quality depend on each database. If a record looks wrong, follow its DOI to the publisher."].map((x) => (
                 <li key={x} className="flex gap-4"><span aria-hidden className="mt-3 h-px w-6 shrink-0 bg-clay" />{x}</li>
               ))}
@@ -50,7 +51,7 @@ export default function About() {
           <h2 className="label text-muted">Sources</h2>
           <ul className="mt-4">
             {[...SOURCES, { id: "unpaywall", name: "Unpaywall", note: "Free full text by DOI", url: "https://unpaywall.org" }].map((s) => (
-              <li key={s.id} className="border-t border-ink/15 py-3.5"><a href={s.url} rel="noopener" className="font-semibold hover:text-clay">{s.name} ↗</a><span className="block text-sm text-muted">{s.note}{s.id === "core" ? ". Active once a CORE key is set." : ""}</span></li>
+              <li key={s.id} className="border-t border-ink/15 py-3.5"><a href={s.url} rel="noopener" className="font-semibold hover:text-clay">{s.name} ↗</a><span className="block text-sm text-muted">{s.note}{s.id === "core" || s.id === "semanticscholar" ? ". Needs a free access key to be set." : ""}</span></li>
             ))}
           </ul>
           <h2 className="label mt-12 text-muted">The eight themes</h2>

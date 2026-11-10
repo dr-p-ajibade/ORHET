@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Rec, SourceReport } from "@/lib/sources";
 
 const NAMES: Record<string, string> = { openalex: "OpenAlex", crossref: "Crossref", europepmc: "Europe PMC", doaj: "DOAJ", semanticscholar: "Semantic Scholar", arxiv: "arXiv", core: "CORE" };
-type Data = { results: Rec[]; sources: SourceReport[]; total: number };
+type Data = { results: Rec[]; sources: SourceReport[]; total: number; totalSource?: string };
 const fmt = (n: number) => n.toLocaleString("en-ZA").replace(/ /g, " ");
 
 function cite(r: Rec) {
@@ -158,11 +158,11 @@ export function Results({ q, hidden = {} }: { q: string; hidden?: Record<string,
           <div className={state === "loading" ? "opacity-50" : ""}>
             <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
               <p className="text-[0.95rem]">
-                {data.total > 0 ? <>About <strong>{fmt(data.total)}</strong> matching records in the largest source.</> : null}{" "}
+                {data.total > 0 ? <>About <strong>{fmt(data.total)}</strong> matching records in {NAMES[data.totalSource || "openalex"]}.</> : null}{" "}
                 Showing {data.results.length} merged results, page {f.page}.
               </p>
               <p className="text-[0.8rem] text-muted">
-                Answered by {live.map((s) => `${NAMES[s.id]}${s.total ? ` (${fmt(s.total)})` : ""}`).join(" · ") || "no source"}
+                Answered by {live.map((s) => NAMES[s.id]).join(" · ")}
               </p>
             </div>
             {data.results.length === 0 ? (

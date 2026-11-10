@@ -46,6 +46,9 @@ export type SourceReport = { id: SourceId; ok: boolean; total?: number; count: n
 const MAIL = process.env.CONTACT_EMAIL || "info@orhet.com";
 const UA = `ORHET/1.0 (https://orhet.proxxymedia.com; mailto:${MAIL})`;
 const PER = 12;
+// Sorting by citations or date is done on the relevant results after merging.
+// Asking the databases to sort returns famous but unrelated papers.
+const per = (qy: Query) => String(qy.sort === "relevance" ? PER : 25);
 
 async function get(url: string, init: RequestInit = {}, ms = 7000, revalidate = 3600): Promise<Response> {
   const res = await fetch(url, {
@@ -101,10 +104,8 @@ async function openalex(qy: Query): Promise<Out> {
   if (qy.oa) f.push("is_oa:true");
   if (qy.from) f.push(`from_publication_date:${qy.from}-01-01`);
   if (qy.to) f.push(`to_publication_date:${qy.to}-12-31`);
-  const u = new URLSearchParams({ search: terms(qy), "per-page": String(PER), page: String(qy.page), mailto: MAIL });
+  const u = new URLSearchParams({ search: terms(qy), "per-page": per(qy), page: String(qy.page), mailto: MAIL });
   if (f.length) u.set("filter", f.join(","));
-  if (qy.sort === "cited") u.set("sort", "cited_by_count:desc");
-  if (qy.sort === "newest") u.set("sort", "publication_date:desc");
   if (process.env.OPENALEX_API_KEY) u.set("api_key", process.env.OPENALEX_API_KEY);
   const j = await (await get(`https://api.openalex.org/works?${u}`)).json();
   const items = (j.results || []).map((w: any) =>
@@ -123,7 +124,7 @@ async function openalex(qy: Query): Promise<Out> {
 }
 
 async function crossref(qy: Query): Promise<Out> {
-  const u = new URLSearchParams({ query: qy.q, rows: String(PER), offset: String((qy.page - 1) * PER), mailto: MAIL,
+  const u = new URLSearchParams({ query: qy.q, rows: per(qy), offset: String((qy.page - 1) * Number(per(qy))), mailto: MAIL,
     select: "DOI,title,author,container-title,volume,issue,issued,is-referenced-by-count,URL,type,abstract" });
   if (qy.author) u.set("query.author", qy.author);
   if (qy.journal) u.set("query.container-title", qy.journal);
@@ -131,8 +132,6 @@ async function crossref(qy: Query): Promise<Out> {
   if (qy.from) f.push(`from-pub-date:${qy.from}`);
   if (qy.to) f.push(`until-pub-date:${qy.to}`);
   if (f.length) u.set("filter", f.join(","));
-  if (qy.sort === "cited") { u.set("sort", "is-referenced-by-count"); u.set("order", "desc"); }
-  if (qy.sort === "newest") { u.set("sort", "published"); u.set("order", "desc"); }
   const j = await (await get(`https://api.crossref.org/works?${u}`)).json();
   const items = (j.message?.items || []).map((w: any) =>
     rec({
@@ -152,11 +151,9 @@ async function europepmc(qy: Query): Promise<Out> {
   if (qy.journal) query += ` AND JOURNAL:"${qy.journal}"`;
   if (qy.oa) query += " AND OPEN_ACCESS:y";
   if (qy.from || qy.to) query += ` AND PUB_YEAR:[${qy.from || 1900} TO ${qy.to || 2100}]`;
-  const u = new URLSearchParams({ query, format: "json", pageSize: "8", resultType: "core" });
+  const u = new URLSearchParams({ query, format: "json", pageSize: "8", resultType: "lite" });
   if (qy.page > 1) return { items: [] };
-  if (qy.sort === "cited") u.set("sort", "CITED desc");
-  if (qy.sort === "newest") u.set("sort", "P_PDATE_D desc");
-  const j = await (await get(`https://www.ebi.ac.uk/europepmc/webservices/rest/search?${u}`)).json();
+  const j = await (await get(`https://www.ebi.ac.uk/europepmc/webservices/rest/search?${u}`, {}, 4500)).json();
   const items = (j.resultList?.result || []).map((w: any) =>
     rec({
       title: w.title || "",
@@ -195,7 +192,7 @@ async function semanticscholar(qy: Query): Promise<Out> {
   if (qy.oa) u.set("openAccessPdf", "");
   const headers: Record<string, string> = {};
   if (process.env.SEMANTIC_SCHOLAR_API_KEY) headers["x-api-key"] = process.env.SEMANTIC_SCHOLAR_API_KEY;
-  const j = await (await get(`https://api.semanticscholar.org/graph/v1/paper/search?${u}`, { headers }, 5000)).json();
+  const j = await (await get(`https://api.semanticscholar.org/graph/v1/paper/search?${u}`, { headers }, 4000)).json();
   const items = (j.data || []).map((w: any) =>
     rec({
       title: w.title || "", authors: (w.authors || []).map((a: any) => a.name),
@@ -208,8 +205,7 @@ async function semanticscholar(qy: Query): Promise<Out> {
 
 async function arxiv(qy: Query): Promise<Out> {
   const u = new URLSearchParams({ search_query: `all:${terms(qy)}`, start: String((qy.page - 1) * 5), max_results: "5" });
-  if (qy.sort === "newest") { u.set("sortBy", "submittedDate"); u.set("sortOrder", "descending"); }
-  const xml = await (await get(`https://export.arxiv.org/api/query?${u}`, { headers: { Accept: "application/atom+xml" } }, 8000)).text();
+  const xml = await (await get(`https://export.arxiv.org/api/query?${u}`, { headers: { Accept: "application/atom+xml" } }, 4500)).text();
   const tag = (s: string, t: string) => s.match(new RegExp(`<${t}[^>]*>([\\s\\S]*?)</${t}>`))?.[1];
   const items = xml.split("<entry>").slice(1).map((e) => {
     const id = clean(tag(e, "id"));
@@ -248,7 +244,7 @@ async function unpaywall(doi: string): Promise<string | undefined> {
   }
 }
 
-export async function federatedSearch(qy: Query): Promise<{ results: Rec[]; sources: SourceReport[]; total: number }> {
+export async function federatedSearch(qy: Query): Promise<{ results: Rec[]; sources: SourceReport[]; total: number; totalSource?: SourceId }> {
   const ids = SOURCES.map((s) => s.id);
   const settled = await Promise.all(
     ids.map(async (id): Promise<SourceReport & { items: Rec[] }> => {
@@ -306,8 +302,9 @@ export async function federatedSearch(qy: Query): Promise<{ results: Rec[]; sour
 
   const results = list.map(({ score, ...r }) => ({ ...r, abstract: r.abstract ? r.abstract.slice(0, 900) : undefined, authors: r.authors.slice(0, 12) }));
   const sources = settled.map(({ items, ...s }) => s);
-  const total = Math.max(0, ...sources.map((s) => s.total || 0));
-  return { results, sources, total };
+  // Report the match count from OpenAlex, whose matching is the strictest of the large sources.
+  const lead = sources.find((s) => s.id === "openalex" && s.ok && s.total) || [...sources].filter((s) => s.total).sort((a, b) => b.total! - a.total!)[0];
+  return { results, sources, total: lead?.total || 0, totalSource: lead?.id };
 }
 
 // ---------- Collection size ----------
